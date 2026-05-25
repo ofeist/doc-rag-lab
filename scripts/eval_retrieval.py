@@ -176,6 +176,32 @@ def rrf_fuse(
     return ranked[:top_k]
 
 
+def bm25_first_fuse(
+    vector_rows: list[dict[str, Any]],
+    bm25_rows: list[dict[str, Any]],
+    top_k: int,
+) -> list[dict[str, Any]]:
+    fused: list[dict[str, Any]] = []
+    seen_keys: set[int] = set()
+
+    for source_name, rows in (("bm25", bm25_rows), ("vector", vector_rows)):
+        for row in rows:
+            key = int(row["key"])
+            if key in seen_keys:
+                continue
+            merged = dict(row)
+            seen_keys.add(key)
+            if source_name == "bm25":
+                merged["bm25_first_rank"] = len(fused) + 1
+            else:
+                merged["vector_fill_rank"] = len(fused) + 1
+            fused.append(merged)
+            if len(fused) >= top_k:
+                return fused
+
+    return fused
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Evaluate retrieval hit@k over a Chroma collection.")
     parser.add_argument(
@@ -197,7 +223,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--mode",
-        choices=["vector", "bm25", "hybrid"],
+        choices=["vector", "bm25", "hybrid", "bm25_first_hybrid"],
         default="vector",
         help="Retrieval mode to evaluate.",
     )
@@ -237,7 +263,7 @@ def main() -> int:
 
     collection = None
     model = None
-    if args.mode in {"vector", "hybrid"}:
+    if args.mode in {"vector", "hybrid", "bm25_first_hybrid"}:
         db_path = Path(args.db)
         if not db_path.exists():
             raise FileNotFoundError(f"Chroma DB not found: {db_path}. Run embed_chunks.py first.")
@@ -253,7 +279,7 @@ def main() -> int:
 
     chunks: list[dict[str, Any]] = []
     bm25 = None
-    if args.mode in {"bm25", "hybrid"}:
+    if args.mode in {"bm25", "hybrid", "bm25_first_hybrid"}:
         chunks = load_chunks(Path(args.chunks))
         bm25 = BM25Okapi([tokenize(str(chunk.get("text", ""))) for chunk in chunks])
 
@@ -266,9 +292,10 @@ def main() -> int:
     print(f"Questions: {len(questions)}")
     print(f"Mode: {args.mode}")
     print(f"Top-k: {args.top_k}")
-    if args.mode == "hybrid":
+    if args.mode in {"hybrid", "bm25_first_hybrid"}:
         print(f"Candidate-k: {args.candidate_k}")
-        print(f"RRF-k: {args.rrf_k}")
+        if args.mode == "hybrid":
+            print(f"RRF-k: {args.rrf_k}")
     print("=" * 120)
 
     for item in questions:
@@ -297,7 +324,7 @@ def main() -> int:
             )
         else:
             if collection is None or model is None or bm25 is None:
-                raise RuntimeError("Hybrid mode requires vector and BM25 retrievers.")
+                raise RuntimeError("Hybrid modes require vector and BM25 retrievers.")
             vector_rows = vector_search(
                 collection=collection,
                 model=model,
@@ -312,7 +339,10 @@ def main() -> int:
                 top_k=args.candidate_k,
                 include_documents=include_documents,
             )
-            rows = rrf_fuse(vector_rows, bm25_rows, args.top_k, args.rrf_k)
+            if args.mode == "hybrid":
+                rows = rrf_fuse(vector_rows, bm25_rows, args.top_k, args.rrf_k)
+            else:
+                rows = bm25_first_fuse(vector_rows, bm25_rows, args.top_k)
 
         metas = [row["meta"] for row in rows]
         distances = [row["distance"] for row in rows]
@@ -347,6 +377,10 @@ def main() -> int:
                     rank_bits.append(f"vector_rank={row['vector_rank']}")
                 if "bm25_rank" in row:
                     rank_bits.append(f"bm25_rank={row['bm25_rank']}")
+                if "bm25_first_rank" in row:
+                    rank_bits.append(f"bm25_first_rank={row['bm25_first_rank']}")
+                if "vector_fill_rank" in row:
+                    rank_bits.append(f"vector_fill_rank={row['vector_fill_rank']}")
                 rank_text = f" {' '.join(rank_bits)}" if rank_bits else ""
                 print(
                     f"    {rank}. distance={distance:.4f} "

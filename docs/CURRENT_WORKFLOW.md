@@ -64,10 +64,14 @@ Supported modes:
 vector
 bm25
 hybrid
+bm25_first_hybrid
 ```
 
 Hybrid retrieval is the current default baseline because it combines semantic search with
 keyword matching through Reciprocal Rank Fusion.
+
+`bm25_first_hybrid` is experimental and currently exists to test table-heavy slices where
+RRF hybrid performs worse than BM25.
 
 ## 4. Answer Batch Eval
 
@@ -157,10 +161,12 @@ Initial retrieval results:
 vector: hit@1 20%, hit@3 40%, hit@5 40%
 bm25:   hit@1 40%, hit@3 60%, hit@5 70%
 hybrid: hit@1 40%, hit@3 40%, hit@5 40%
+bm25_first_hybrid: hit@1 40%, hit@3 60%, hit@5 70%
 ```
 
 The low hybrid result is intentional signal, not a hidden failure. It suggests that the
 current page-local fixed chunking and RRF settings are weak for dense table lookups.
+The `bm25_first_hybrid` experiment avoids the RRF regression but does not beat BM25.
 
 ## 7. Known Limitations
 

@@ -34,9 +34,15 @@ Results:
 | vector | 20% | 40% | 40% |
 | BM25 | 40% | 60% | 70% |
 | hybrid | 40% | 40% | 40% |
+| bm25_first_hybrid | 40% | 60% | 70% |
 
 BM25 is the best current mode for this slice. Hybrid is worse than BM25 at hit@3/hit@5,
 so the current RRF fusion is not helping table-heavy address-map retrieval.
+
+`bm25_first_hybrid` was added as a small experiment after the first diagnostic. It keeps
+BM25 candidates first and only fills remaining result slots with vector candidates. On
+this slice it matches BM25 exactly at top 5. That is an improvement over current RRF
+hybrid, but it does not improve beyond BM25.
 
 ## Chunk Inspection
 
@@ -133,13 +139,18 @@ name and the address rows.
 BM25 has better hit@3/hit@5 than hybrid on this slice:
 
 ```text
-BM25:   hit@3 60%, hit@5 70%
-hybrid: hit@3 40%, hit@5 40%
+BM25:              hit@3 60%, hit@5 70%
+hybrid:            hit@3 40%, hit@5 40%
+bm25_first_hybrid: hit@3 60%, hit@5 70%
 ```
 
 RRF gives vector-ranked near-duplicate table chunks enough influence to displace BM25
 hits. The clearest example is `memory-map-007`: BM25 ranks page 96 first, but hybrid does
 not place page 96 in the top 5.
+
+The `bm25_first_hybrid` experiment confirms that protecting BM25 ordering prevents that
+specific regression. It also shows that simply appending vector fill candidates is not
+enough to recover additional table hits.
 
 ### 6. Some Eval Questions Are Intentionally Broad
 
@@ -151,10 +162,12 @@ harder than a narrow exact-address query.
 
 Do these one at a time and rerun the same eval after each change.
 
-1. BM25-first hybrid mode for table-heavy slices
+1. BM25-weighted fusion for table-heavy slices
 
-   Add a mode or option that preserves BM25 top results before adding vector results. This
-   is the highest-ROI next experiment because BM25 is already better for `memory_map`.
+   `bm25_first_hybrid` now confirms that preserving BM25 top results avoids the RRF
+   regression, but it does not beat BM25. The next variant should try weighted RRF or a
+   score/rank rule where BM25 has more influence without completely ignoring useful
+   vector candidates.
 
 2. Smaller chunk-size experiment
 
