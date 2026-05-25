@@ -415,8 +415,14 @@ python scripts/run_answer_eval.py \
   --candidate-k 8 \
   --model gpt-5.4-nano \
   --base-url https://api.openai.com/v1 \
-  --output-jsonl eval/rag_answer_interrupt_gpt54nano_batch.jsonl
+  --output-jsonl eval/rag_answer_interrupt_gpt54nano_batch.jsonl \
+  --overwrite
 ```
+
+JSONL output is protected by default: `run_answer_eval.py` refuses to write to an existing
+output file unless the behavior is explicit. Use `--overwrite` for repeatable batch eval
+runs, and use `--append` only when intentionally collecting multiple runs in the same
+JSONL file.
 
 Dry-run batch smoke test:
 
@@ -428,7 +434,8 @@ python scripts/run_answer_eval.py \
   --top-k 3 \
   --candidate-k 8 \
   --dry-run \
-  --output-jsonl /tmp/rag_answer_batch_dry_run.jsonl
+  --output-jsonl /tmp/rag_answer_batch_dry_run.jsonl \
+  --overwrite
 ```
 
 Manual grading stays human-reviewed for now. Use `eval/rag_answer_manual_grading_template.md` as the report format.

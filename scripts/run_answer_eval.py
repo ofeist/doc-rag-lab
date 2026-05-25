@@ -80,6 +80,8 @@ def main() -> int:
     parser.add_argument("--timeout-seconds", type=int, default=60, help="HTTP timeout in seconds.")
     parser.add_argument("--output-jsonl", required=True, help="JSONL output path.")
     parser.add_argument("--dry-run", action="store_true", help="Do not call the model endpoint.")
+    parser.add_argument("--overwrite", action="store_true", help="Replace an existing JSONL output file.")
+    parser.add_argument("--append", action="store_true", help="Append to an existing JSONL output file.")
     args = parser.parse_args()
 
     questions = load_eval_questions(Path(args.eval))
@@ -90,6 +92,20 @@ def main() -> int:
         questions = questions[: args.limit]
 
     rows_out = Path(args.output_jsonl)
+    if args.overwrite and args.append:
+        print("ERROR: --overwrite and --append cannot be used together.")
+        return 1
+
+    if rows_out.exists():
+        if args.overwrite:
+            rows_out.unlink()
+        elif args.append:
+            pass
+        else:
+            print(f"ERROR: Output file already exists: {rows_out}")
+            print("Use --overwrite to replace it, or --append to add records to the existing file.")
+            return 1
+
     if args.mode in {"vector", "hybrid"} and not Path(args.db).is_dir():
         print(f"ERROR: Chroma directory not found: {args.db}")
         return 1
