@@ -1,0 +1,62 @@
+[
+  {
+    "id": "irq-001",
+    "question": "What does the Interrupt Router module schedule and what are service providers?",
+    "expected_pages": [1364, 1365],
+    "notes": "Overview lookup for service requests and CPU/DMA service providers."
+  },
+  {
+    "id": "irq-002",
+    "question": "What does each Service Request Node contain and how is it connected to the Interrupt Router?",
+    "expected_pages": [1365, 1366],
+    "notes": "SRN architecture and SRC register lookup."
+  },
+  {
+    "id": "irq-003",
+    "question": "What does the SRPN field define in the SRC register?",
+    "expected_pages": [1367],
+    "notes": "Service Request Priority Number field lookup."
+  },
+  {
+    "id": "irq-004",
+    "question": "Which TOS encodings map a service request to CPU0, DMA, CPU1, CPU2, CPU3, CPU4, and CPU5?",
+    "expected_pages": [1368],
+    "notes": "Type of Service table lookup."
+  },
+  {
+    "id": "irq-005",
+    "question": "What sequence is required to change SRC TOS or SRPN for an enabled Service Request Node?",
+    "expected_pages": [1370],
+    "notes": "SRN reconfiguration procedure and LWSRx polling lookup."
+  },
+  {
+    "id": "irq-006",
+    "question": "How is SRC register write protection split between ACCEN_CONFIG and ACCEN_SRC_TOSx?",
+    "expected_pages": [1370, 1371],
+    "notes": "Access protection lookup for SRC lower and upper halves."
+  },
+  {
+    "id": "irq-007",
+    "question": "What is the purpose of SETR and CLRR in the Service Request Control Register?",
+    "expected_pages": [1368, 1372],
+    "notes": "Service request set and clear bit lookup."
+  },
+  {
+    "id": "irq-008",
+    "question": "How does the Interrupt Control Unit arbitrate competing service requests?",
+    "expected_pages": [1365, 1378, 1386, 1387],
+    "notes": "ICU arbitration and service provider interface lookup."
+  },
+  {
+    "id": "irq-009",
+    "question": "What are General Purpose Service Request Nodes and how are they used for software interrupts?",
+    "expected_pages": [1364, 1382, 1383, 1389],
+    "notes": "GPSR and software interrupt lookup."
+  },
+  {
+    "id": "irq-010",
+    "question": "Which register address spaces are allocated for INT and SRC registers?",
+    "expected_pages": [1391, 1392],
+    "notes": "Interrupt Router register address space lookup."
+  }
+]

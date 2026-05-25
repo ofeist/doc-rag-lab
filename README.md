@@ -309,6 +309,53 @@ hybrid: hit@1 90%, hit@3 100%, hit@5 100%
 
 Detailed notes are in `eval/dma_cache_hybrid_baseline.md`.
 
+## Focused Interrupt Routing Index
+
+The third focused retrieval slice checks interrupt routing and service request terminology:
+
+```text
+PDF pages 1364-1397
+topic: Interrupt Router, SRN/SRC registers, TOS routing, ICU arbitration, GPSR/software interrupts
+```
+
+Build the focused index:
+
+```bash
+python scripts/extract_pages.py docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf \
+  --page-ranges 1364-1397 \
+  --out data/raw_pages.jsonl \
+  --no-preview
+
+python scripts/chunk_pages.py \
+  --input data/raw_pages.jsonl \
+  --output data/chunks.jsonl \
+  --source docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf
+
+python scripts/embed_chunks.py \
+  --chunks data/chunks.jsonl \
+  --db vector_db/chroma \
+  --collection technical_docs \
+  --reset
+```
+
+Run the third mini retrieval eval:
+
+```bash
+python scripts/eval_retrieval.py --mode vector --eval eval/interrupt_routing_eval.json
+python scripts/eval_retrieval.py --mode bm25 --eval eval/interrupt_routing_eval.json
+python scripts/eval_retrieval.py --mode hybrid --eval eval/interrupt_routing_eval.json
+```
+
+Current baseline:
+
+```text
+vector: hit@1 80%, hit@3 90%, hit@5 90%
+bm25:   hit@1 60%, hit@3 90%, hit@5 90%
+hybrid: hit@1 70%, hit@3 100%, hit@5 100%
+```
+
+Detailed notes are in `eval/interrupt_routing_hybrid_baseline.md`.
+
 ## Step 4: First RAG Answer
 
 `scripts/ask_chunks.py` expects an OpenAI-compatible chat completion endpoint.
