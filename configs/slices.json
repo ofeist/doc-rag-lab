@@ -1,0 +1,50 @@
+{
+  "boot_bmhd": {
+    "description": "Boot Mode Header and startup firmware flow slice.",
+    "pdf": "docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf",
+    "page_ranges": "115-126",
+    "doc_id": "boot_bmhd",
+    "collection": "technical_docs",
+    "eval": "eval/boot_bmhd_eval.json",
+    "answer_output": "eval/rag_answer_boot_bmhd_gpt54nano_batch.jsonl",
+    "grading": "eval/rag_answer_boot_bmhd_gpt54nano_batch_grading.md",
+    "default_retrieval_mode": "hybrid",
+    "default_top_k": 3,
+    "default_candidate_k": 8,
+    "default_rrf_k": 60,
+    "default_model": "gpt-5.4-nano",
+    "default_max_tokens": 900
+  },
+  "dma_cache": {
+    "description": "DMA, cache coherency, cacheability, and LMU-related slice.",
+    "pdf": "docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf",
+    "page_ranges": "257-259,307-314,1435-1455,1483-1488",
+    "doc_id": "dma_cache",
+    "collection": "technical_docs",
+    "eval": "eval/dma_cache_eval.json",
+    "answer_output": "eval/rag_answer_dma_cache_gpt54nano_batch.jsonl",
+    "grading": "eval/rag_answer_dma_cache_gpt54nano_batch_grading.md",
+    "default_retrieval_mode": "hybrid",
+    "default_top_k": 3,
+    "default_candidate_k": 8,
+    "default_rrf_k": 60,
+    "default_model": "gpt-5.4-nano",
+    "default_max_tokens": 500
+  },
+  "interrupt_routing": {
+    "description": "Interrupt Router, service request, SRC, TOS routing, and CPU service provider slice.",
+    "pdf": "docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf",
+    "page_ranges": "1364-1397",
+    "doc_id": "interrupt_routing",
+    "collection": "technical_docs",
+    "eval": "eval/interrupt_routing_eval.json",
+    "answer_output": "eval/rag_answer_interrupt_gpt54nano_batch.jsonl",
+    "grading": "eval/rag_answer_interrupt_gpt54nano_batch_grading.md",
+    "default_retrieval_mode": "hybrid",
+    "default_top_k": 3,
+    "default_candidate_k": 8,
+    "default_rrf_k": 60,
+    "default_model": "gpt-5.4-nano",
+    "default_max_tokens": 400
+  }
+}

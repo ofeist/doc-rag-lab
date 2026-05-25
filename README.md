@@ -92,6 +92,51 @@ vector_db/chroma
 `--doc-id` is written into raw page and chunk metadata so focused slices can later move to
 manifest-driven ingest and filtering.
 
+## Slice Manifest
+
+Known focused RAG slices are recorded in:
+
+```text
+configs/slices.json
+```
+
+The manifest records:
+
+```text
+PDF path
+page ranges
+doc ID
+Chroma collection
+retrieval eval file
+answer batch output
+grading report
+default retrieval/model settings
+```
+
+For now the manifest is documentation/config only. It is intended to support future helper
+scripts such as:
+
+```bash
+python scripts/run_slice_eval.py --slice boot_bmhd --overwrite
+```
+
+Current manual workflow using the manifest values:
+
+```bash
+python scripts/ingest_document.py \
+  --pdf <pdf> \
+  --page-ranges <page_ranges> \
+  --doc-id <doc_id> \
+  --collection <collection> \
+  --reset
+```
+
+Validate the manifest:
+
+```bash
+python scripts/validate_slices_config.py
+```
+
 ## Step 1: PDF extraction
 
 Put a PDF in `docs/`, for example:
