@@ -2,6 +2,7 @@
 
 import argparse
 import json
+from datetime import datetime, timezone
 import os
 import re
 from pathlib import Path
@@ -178,6 +179,67 @@ def build_context_and_sources(rows: list[dict[str, Any]]) -> tuple[str, list[str
     return "\n".join(blocks), source_lines
 
 
+def build_source_records(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for idx, row in enumerate(rows, start=1):
+        meta = row["meta"]
+        records.append(
+            {
+                "id": f"S{idx}",
+                "source": str(meta.get("source", "unknown")),
+                "page_start": int(meta.get("page_start", -1)),
+                "page_end": int(meta.get("page_end", meta.get("page_start", -1))),
+                "chunk_index": int(meta.get("chunk_index", -1)),
+                "score": float(row.get("distance", 0.0)),
+                "vector_rank": row.get("vector_rank"),
+                "bm25_rank": row.get("bm25_rank"),
+                "hybrid_rank": row.get("hybrid_rank"),
+                "bm25_score": row.get("bm25_score"),
+            }
+        )
+    return records
+
+
+def write_jsonl_record(path: Path, record: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def build_run_record(
+    *,
+    question: str,
+    model: str,
+    base_url: str,
+    mode: str,
+    top_k: int,
+    candidate_k: int,
+    rrf_k: int,
+    embedding_model: str,
+    collection: str,
+    chunks: str,
+    sources: list[dict[str, Any]],
+    answer: str | None,
+    dry_run: bool,
+) -> dict[str, Any]:
+    return {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "question": question,
+        "model": model,
+        "base_url": base_url,
+        "mode": mode,
+        "top_k": top_k,
+        "candidate_k": candidate_k,
+        "rrf_k": rrf_k,
+        "embedding_model": embedding_model,
+        "collection": collection,
+        "chunks": chunks,
+        "sources": sources,
+        "answer": answer,
+        "dry_run": dry_run,
+    }
+
+
 def build_user_prompt(question: str, context: str) -> str:
     return (
         "Question:\n"
@@ -197,7 +259,7 @@ def call_openai_compatible(
     model: str,
     api_key: str,
     user_prompt: str,
-    temperature: float,
+    temperature: float | None,
     max_tokens: int,
     timeout_seconds: int,
 ) -> str:
@@ -212,7 +274,7 @@ def call_openai_compatible(
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
-        "temperature": temperature,
+        "max_completion_tokens": max_tokens,
     }
     if temperature is not None:
         payload["temperature"] = temperature
@@ -279,6 +341,10 @@ def main() -> int:
     )
     parser.add_argument("--dry-run", action="store_true", help="Do not call model endpoint.")
     parser.add_argument("--show-context", action="store_true", help="Print full retrieved context.")
+    parser.add_argument(
+        "--output-jsonl",
+        help="Optional JSONL file to append one structured run record.",
+    )
     parser.add_argument(
         "--temperature",
         type=float,
@@ -347,6 +413,7 @@ def main() -> int:
         rows = rrf_fuse(vector_rows, bm25_rows, args.top_k, args.rrf_k)
 
     context, source_lines = build_context_and_sources(rows)
+    source_records = build_source_records(rows)
     user_prompt = build_user_prompt(args.question, context)
 
     print("Question:")
@@ -378,6 +445,27 @@ def main() -> int:
         print()
         print("USER:")
         print(user_prompt)
+        if args.output_jsonl:
+            write_jsonl_record(
+                Path(args.output_jsonl),
+                build_run_record(
+                    question=args.question,
+                    model=args.model,
+                    base_url=args.base_url,
+                    mode=args.mode,
+                    top_k=args.top_k,
+                    candidate_k=args.candidate_k,
+                    rrf_k=args.rrf_k,
+                    embedding_model=args.embedding_model,
+                    collection=args.collection,
+                    chunks=args.chunks,
+                    sources=source_records,
+                    answer=None,
+                    dry_run=True,
+                ),
+            )
+            print()
+            print(f"Wrote JSONL record: {args.output_jsonl}")
         return 0
 
     api_key = os.getenv(args.api_key_env, "").strip()
@@ -403,6 +491,29 @@ def main() -> int:
     print()
     print("Answer:")
     print(answer)
+
+    if args.output_jsonl:
+        write_jsonl_record(
+            Path(args.output_jsonl),
+            build_run_record(
+                question=args.question,
+                model=args.model,
+                base_url=args.base_url,
+                mode=args.mode,
+                top_k=args.top_k,
+                candidate_k=args.candidate_k,
+                rrf_k=args.rrf_k,
+                embedding_model=args.embedding_model,
+                collection=args.collection,
+                chunks=args.chunks,
+                sources=source_records,
+                answer=answer,
+                dry_run=False,
+            ),
+        )
+        print()
+        print(f"Wrote JSONL record: {args.output_jsonl}")
+
     return 0
 
 
