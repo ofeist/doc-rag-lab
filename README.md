@@ -22,6 +22,34 @@ vector_db/   future local vector database, ignored by git
 
 ## Setup
 
+Recommended on Linux/macOS/Git Bash:
+
+```bash
+./scripts/setup.sh
+source .venv/bin/activate
+```
+
+Install the heavier Chroma/embedding dependencies later when you need search/RAG:
+
+```bash
+./scripts/setup.sh --rag
+```
+
+Recommended on Windows PowerShell:
+
+```powershell
+.\scripts\setup.ps1
+.\.venv\Scripts\Activate.ps1
+```
+
+PowerShell with RAG dependencies:
+
+```powershell
+.\scripts\setup.ps1 -Rag
+```
+
+Manual setup:
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate
