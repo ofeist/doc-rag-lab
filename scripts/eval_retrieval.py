@@ -147,6 +147,64 @@ def bm25_search(
     return rows
 
 
+# Experimental (P3-3, bm25_table_boost mode). Local to this experiment.
+TABLE_LIKE_TERMS = [
+    "address range", "size", "segment", "cpu0", "cpu1", "cpu2", "cpu3",
+    "dspr", "pspr", "dlmu", "lmuram", "boot rom", "program flash",
+    "data flash", "pflash", "eeprom", "ucb", "cfs", "sota",
+]
+
+
+def is_table_like_query(query: str) -> bool:
+    low = query.lower()
+    return any(term in low for term in TABLE_LIKE_TERMS)
+
+
+def bm25_table_boost_search(
+    *,
+    bm25: BM25Okapi,
+    chunks: list[dict[str, Any]],
+    query: str,
+    top_k: int,
+    boost: float,
+    include_documents: bool,
+) -> tuple[list[dict[str, Any]], bool]:
+    """BM25 ranking that prefers table_row_group chunks for table-like queries.
+
+    Returns (rows, table_like). The boost is multiplicative on the BM25 score and
+    only applies when the query looks table-like, so prose-only questions keep
+    plain BM25 ranking.
+    """
+    scores = bm25.get_scores(tokenize(query))
+    table_like = is_table_like_query(query)
+
+    adjusted: list[float] = []
+    for index in range(len(scores)):
+        score = float(scores[index])
+        if table_like and str(chunks[index].get("chunk_type", "")) == "table_row_group":
+            score *= boost
+        adjusted.append(score)
+
+    ranked_indices = sorted(range(len(adjusted)), key=lambda i: adjusted[i], reverse=True)[:top_k]
+
+    rows = []
+    for rank, index in enumerate(ranked_indices, start=1):
+        chunk = chunks[index]
+        rows.append(
+            {
+                "key": int(chunk.get("chunk_index", index)),
+                "meta": safe_metadata(chunk),
+                "distance": -adjusted[index],
+                "bm25_score": float(scores[index]),
+                "boosted_score": adjusted[index],
+                "chunk_type": str(chunk.get("chunk_type", "")),
+                "document": str(chunk.get("text", "")) if include_documents else "",
+                "bm25_rank": rank,
+            }
+        )
+    return rows, table_like
+
+
 def rrf_fuse(
     vector_rows: list[dict[str, Any]],
     bm25_rows: list[dict[str, Any]],
@@ -223,9 +281,16 @@ def main() -> int:
     )
     parser.add_argument(
         "--mode",
-        choices=["vector", "bm25", "hybrid", "bm25_first_hybrid"],
+        choices=["vector", "bm25", "hybrid", "bm25_first_hybrid", "bm25_table_boost"],
         default="vector",
         help="Retrieval mode to evaluate.",
+    )
+    parser.add_argument(
+        "--table-boost",
+        type=float,
+        default=1.15,
+        help="Experimental (bm25_table_boost): BM25 score multiplier applied to "
+        "table_row_group chunks for table-like queries. Default: 1.15",
     )
     parser.add_argument("--top-k", type=int, default=5, help="Number of results to retrieve.")
     parser.add_argument(
@@ -279,7 +344,7 @@ def main() -> int:
 
     chunks: list[dict[str, Any]] = []
     bm25 = None
-    if args.mode in {"bm25", "hybrid", "bm25_first_hybrid"}:
+    if args.mode in {"bm25", "hybrid", "bm25_first_hybrid", "bm25_table_boost"}:
         chunks = load_chunks(Path(args.chunks))
         bm25 = BM25Okapi([tokenize(str(chunk.get("text", ""))) for chunk in chunks])
 
@@ -296,6 +361,8 @@ def main() -> int:
         print(f"Candidate-k: {args.candidate_k}")
         if args.mode == "hybrid":
             print(f"RRF-k: {args.rrf_k}")
+    if args.mode == "bm25_table_boost":
+        print(f"Table boost: {args.table_boost} (applied to table_row_group on table-like queries)")
     print("=" * 120)
 
     for item in questions:
@@ -320,6 +387,17 @@ def main() -> int:
                 chunks=chunks,
                 query=item["question"],
                 top_k=args.top_k,
+                include_documents=include_documents,
+            )
+        elif args.mode == "bm25_table_boost":
+            if bm25 is None:
+                raise RuntimeError("bm25_table_boost mode requires an initialized BM25 index.")
+            rows, query_table_like = bm25_table_boost_search(
+                bm25=bm25,
+                chunks=chunks,
+                query=item["question"],
+                top_k=args.top_k,
+                boost=args.table_boost,
                 include_documents=include_documents,
             )
         else:
@@ -364,6 +442,8 @@ def main() -> int:
         print(f"  expected: {sorted(expected_pages)}")
         print(f"  top_pages: {top_pages}")
         print(f"  top_distances: {distance_text}")
+        if args.mode == "bm25_table_boost":
+            print(f"  table_like_query: {query_table_like}")
         if item.get("notes"):
             print(f"  notes: {item['notes']}")
 
