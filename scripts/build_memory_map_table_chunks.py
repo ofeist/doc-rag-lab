@@ -389,6 +389,9 @@ def main() -> None:
     parser.add_argument("--residual-overlap", type=int, default=60, help="Token overlap for non-table text.")
     args = parser.parse_args()
 
+    if args.residual_overlap >= args.residual_chunk_size:
+        raise SystemExit("--residual-overlap must be smaller than --residual-chunk-size")
+
     records = [
         r
         for r in read_jsonl(Path(args.input))

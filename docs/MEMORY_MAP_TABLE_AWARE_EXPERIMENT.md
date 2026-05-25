@@ -128,10 +128,17 @@ is retrievable; it is just outranked by concept-dense prose.
 
 ## Notes / caveats
 
+- This builder is a `memory_map`-specific heuristic, not a general table parser.
+  Its assumptions (running boilerplate, `Table NN` title lines, the
+  `Segm`/`ent`/... header block, multiline address rows) are tuned to the AURIX
+  TC3xx MEMMAP pages and should not be assumed to hold on other documents.
 - Row field separation is best-effort. Multiline cells (e.g. `Access2) /` +
   `SRIBE`, or a description split across two lines) are joined with `|`, so a few
   rows have slightly noisy column alignment. All tokens are preserved, which is
   what matters for retrieval.
+- `current_segment` intentionally carries across pages so continuation tables
+  (`... (cont’d)`) inherit the correct segment context. A new alternate-map table
+  resets it via its own segment marker.
 - Segment detection was reliable on this slice (31 accepted, 0 skipped) because
   every segment marker is immediately followed by an address range. The builder
   prints a warning if any marker is skipped, so this stays visible on other data.
