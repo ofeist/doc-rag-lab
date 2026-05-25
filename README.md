@@ -8,7 +8,7 @@ The first iteration is intentionally CLI-first:
 PDF -> raw_pages.jsonl -> chunks.jsonl -> ChromaDB -> search -> first RAG answer
 ```
 
-No UI, Docker, OCR, hybrid search, reranker, or production platform yet.
+No UI, Docker, OCR, reranker, or production platform yet.
 
 ## Structure
 
@@ -61,6 +61,36 @@ On Git Bash for Windows, activation may be:
 ```bash
 source .venv/Scripts/activate
 ```
+
+## Repeatable Slice Ingest
+
+Use `scripts/ingest_document.py` to run the focused slice pipeline end to end:
+
+```bash
+python scripts/ingest_document.py \
+  --pdf docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf \
+  --page-ranges 115-126 \
+  --doc-id boot_bmhd \
+  --collection technical_docs \
+  --reset
+```
+
+This replaces the manual sequence:
+
+```text
+extract_pages.py -> chunk_pages.py -> embed_chunks.py
+```
+
+Default generated outputs:
+
+```text
+data/raw_pages.jsonl
+data/chunks.jsonl
+vector_db/chroma
+```
+
+`--doc-id` is written into raw page and chunk metadata so focused slices can later move to
+manifest-driven ingest and filtering.
 
 ## Step 1: PDF extraction
 

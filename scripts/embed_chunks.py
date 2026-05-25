@@ -29,6 +29,7 @@ def read_jsonl(path: Path) -> Iterator[dict]:
 
 def safe_metadata(chunk: dict) -> dict:
     return {
+        "doc_id": str(chunk.get("doc_id", "")),
         "source": str(chunk.get("source", "")),
         "page_start": int(chunk.get("page_start", -1)),
         "page_end": int(chunk.get("page_end", -1)),
@@ -47,27 +48,18 @@ def build_chunk_id(chunk: dict) -> str:
     return f"{source_name}-p{page_start:05d}-c{page_chunk_index:03d}-g{chunk_index:06d}"
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Embed chunks.jsonl into local ChromaDB.")
-    parser.add_argument("--chunks", default="data/chunks.jsonl", help="Path to chunks JSONL file.")
-    parser.add_argument("--db", default="vector_db/chroma", help="Persistent ChromaDB directory.")
-    parser.add_argument("--collection", default="technical_docs", help="Chroma collection name.")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="SentenceTransformer model name.")
-    parser.add_argument("--batch-size", type=int, default=32, help="Embedding batch size.")
-    parser.add_argument(
-        "--reset",
-        action="store_true",
-        help="Delete existing ChromaDB directory before embedding.",
-    )
-    args = parser.parse_args()
-
-    chunks_path = Path(args.chunks)
-    db_path = Path(args.db)
-
+def embed_chunks(
+    chunks_path: Path,
+    db_path: Path,
+    collection_name: str,
+    model_name: str,
+    batch_size: int,
+    reset: bool = False,
+) -> int:
     if not chunks_path.exists():
         raise FileNotFoundError(f"Chunks file not found: {chunks_path}")
 
-    if args.reset and db_path.exists():
+    if reset and db_path.exists():
         print(f"Resetting existing DB: {db_path}")
         shutil.rmtree(db_path)
 
@@ -98,24 +90,24 @@ def main() -> None:
     print(f"Chunks loaded: {len(chunks)}")
     print(f"Chunks skipped because empty: {skipped}")
     print(f"Chunks to embed: {len(documents)}")
-    print(f"Loading embedding model: {args.model}")
+    print(f"Loading embedding model: {model_name}")
 
-    model = SentenceTransformer(args.model)
+    model = SentenceTransformer(model_name)
 
     client = chromadb.PersistentClient(
         path=str(db_path),
         settings=Settings(anonymized_telemetry=False),
     )
     collection = client.get_or_create_collection(
-        name=args.collection,
+        name=collection_name,
         metadata={"hnsw:space": "cosine"},
     )
 
-    print(f"Writing to Chroma collection: {args.collection}")
+    print(f"Writing to Chroma collection: {collection_name}")
     print(f"DB path: {db_path}")
 
-    for start in tqdm(range(0, len(documents), args.batch_size), desc="Embedding"):
-        end = start + args.batch_size
+    for start in tqdm(range(0, len(documents), batch_size), desc="Embedding"):
+        end = start + batch_size
         batch_docs = documents[start:end]
         embeddings = model.encode(
             batch_docs,
@@ -134,6 +126,31 @@ def main() -> None:
     print("Done.")
     print(f"Collection count: {collection.count()}")
     print('Next test: python scripts/search_chunks.py "your search question here"')
+    return collection.count()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Embed chunks.jsonl into local ChromaDB.")
+    parser.add_argument("--chunks", default="data/chunks.jsonl", help="Path to chunks JSONL file.")
+    parser.add_argument("--db", default="vector_db/chroma", help="Persistent ChromaDB directory.")
+    parser.add_argument("--collection", default="technical_docs", help="Chroma collection name.")
+    parser.add_argument("--model", default=DEFAULT_MODEL, help="SentenceTransformer model name.")
+    parser.add_argument("--batch-size", type=int, default=32, help="Embedding batch size.")
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Delete existing ChromaDB directory before embedding.",
+    )
+    args = parser.parse_args()
+
+    embed_chunks(
+        chunks_path=Path(args.chunks),
+        db_path=Path(args.db),
+        collection_name=args.collection,
+        model_name=args.model,
+        batch_size=args.batch_size,
+        reset=args.reset,
+    )
 
 
 if __name__ == "__main__":
