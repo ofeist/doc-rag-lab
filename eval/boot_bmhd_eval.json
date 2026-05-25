@@ -1,0 +1,62 @@
+[
+  {
+    "id": "boot-001",
+    "question": "What memory can be overwritten during startup on CPU0 DSPR and PSPR?",
+    "expected_pages": [115],
+    "notes": "Direct prose lookup for RAM overwrite during startup."
+  },
+  {
+    "id": "boot-002",
+    "question": "What is the Boot Mode Header BMHD structure?",
+    "expected_pages": [117],
+    "notes": "Table 45 lookup."
+  },
+  {
+    "id": "boot-003",
+    "question": "PINDIS bit 0 mode selection by configuration pins",
+    "expected_pages": [117],
+    "notes": "Table extraction stress test for BMI.PINDIS."
+  },
+  {
+    "id": "boot-004",
+    "question": "Which HWCFG values select internal start from Flash, Alternate Boot Mode, and Bootstrap Loader mode?",
+    "expected_pages": [117],
+    "notes": "Table 45 exact value lookup."
+  },
+  {
+    "id": "boot-005",
+    "question": "How does SSW process Boot Mode Headers and their copies?",
+    "expected_pages": [118, 119, 120],
+    "notes": "Procedure and flow lookup."
+  },
+  {
+    "id": "boot-006",
+    "question": "When does the SSW use HWCFG pins instead of the BMI boot mode selection?",
+    "expected_pages": [119, 120],
+    "notes": "Boot mode selection from pins and flow diagram."
+  },
+  {
+    "id": "boot-007",
+    "question": "Where can Alternate Boot Mode Headers be located and what is STADABM?",
+    "expected_pages": [121, 122],
+    "notes": "ABM header location and start address lookup."
+  },
+  {
+    "id": "boot-008",
+    "question": "How is CRC calculated for ABMHD CHKSTART CHKEND CRCRANGE?",
+    "expected_pages": [122, 123],
+    "notes": "ABMHD CRC and checked memory range."
+  },
+  {
+    "id": "boot-009",
+    "question": "What happens if no valid Boot Mode Header is found?",
+    "expected_pages": [123, 124, 125, 126],
+    "notes": "Known weaker query; useful for ranking quality."
+  },
+  {
+    "id": "boot-010",
+    "question": "What does the startup firmware main flow do after Startup Mode processing?",
+    "expected_pages": [125, 126],
+    "notes": "Figure 21 main flow lookup."
+  }
+]

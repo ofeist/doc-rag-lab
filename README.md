@@ -205,6 +205,15 @@ python scripts/search_chunks.py "RAM overwrite during startup CPU0 DSPR PSPR" --
 python scripts/search_chunks.py "CRC calculation ABMHD CHKSTART CHKEND" --db vector_db/chroma --collection technical_docs
 ```
 
+Run the mini retrieval eval:
+
+```bash
+python scripts/eval_retrieval.py \
+  --eval eval/boot_bmhd_eval.json \
+  --db vector_db/chroma \
+  --collection technical_docs
+```
+
 Expected retrieval targets:
 
 ```text
