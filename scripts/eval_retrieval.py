@@ -13,6 +13,13 @@ from sentence_transformers import SentenceTransformer
 DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
 
 
+def preview_text(text: str, max_chars: int) -> str:
+    cleaned = " ".join(text.split())
+    if len(cleaned) <= max_chars:
+        return cleaned
+    return cleaned[:max_chars].rstrip() + "..."
+
+
 def load_questions(path: Path) -> list[dict[str, Any]]:
     with path.open("r", encoding="utf-8") as f:
         questions = json.load(f)
@@ -56,6 +63,17 @@ def main() -> int:
         default=None,
         help="Optional hit@3 threshold between 0 and 1 that makes the command fail if not met.",
     )
+    parser.add_argument(
+        "--debug-failures",
+        action="store_true",
+        help="Print retrieved snippets for questions that miss hit@3.",
+    )
+    parser.add_argument(
+        "--debug-snippet-chars",
+        type=int,
+        default=500,
+        help="Snippet length used with --debug-failures.",
+    )
     args = parser.parse_args()
 
     questions = load_questions(Path(args.eval))
@@ -91,14 +109,19 @@ def main() -> int:
             show_progress_bar=False,
         ).tolist()[0]
 
+        include = ["metadatas", "distances"]
+        if args.debug_failures:
+            include.append("documents")
+
         results = collection.query(
             query_embeddings=[query_embedding],
             n_results=args.top_k,
-            include=["metadatas", "distances"],
+            include=include,
         )
 
         metas = results["metadatas"][0]
         distances = results["distances"][0]
+        documents = results.get("documents", [[]])[0]
         top_pages = [f"{m.get('page_start')}-{m.get('page_end')}" for m in metas]
 
         this_hit_at_1 = bool(metas) and page_hit(metas[0], expected_pages)
@@ -119,6 +142,17 @@ def main() -> int:
         print(f"  top_distances: {distance_text}")
         if item.get("notes"):
             print(f"  notes: {item['notes']}")
+
+        if args.debug_failures and not this_hit_at_3:
+            print("  debug_results:")
+            for rank, (meta, distance) in enumerate(zip(metas, distances), start=1):
+                document = documents[rank - 1] if rank - 1 < len(documents) else ""
+                print(
+                    f"    {rank}. distance={distance:.4f} "
+                    f"page={meta.get('page_start')}-{meta.get('page_end')} "
+                    f"chunk={meta.get('chunk_index')}"
+                )
+                print(f"       {preview_text(document, args.debug_snippet_chars)}")
         print()
 
     total = len(questions)

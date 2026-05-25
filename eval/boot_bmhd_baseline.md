@@ -28,6 +28,16 @@ hit@3: 7/10 = 70.00%
 hit@5: 9/10 = 90.00%
 ```
 
+Failure inspection:
+
+```bash
+python scripts/eval_retrieval.py \
+  --eval eval/boot_bmhd_eval.json \
+  --db vector_db/chroma \
+  --collection technical_docs \
+  --debug-failures
+```
+
 Passes at hit@3:
 
 ```text
@@ -54,4 +64,5 @@ Interpretation:
 The focused PyMuPDF baseline is good enough to continue, especially for exact table-field queries.
 It is not yet robust enough for broader procedural questions where flow diagrams and neighboring pages compete.
 Before tuning the LLM, improve or compare retrieval using query wording, section-aware chunking, and parser alternatives.
+The current failures mostly look like ranking problems: relevant chunks often appear in top 5 but not top 3.
 ```

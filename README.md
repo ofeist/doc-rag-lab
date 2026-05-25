@@ -214,6 +214,16 @@ python scripts/eval_retrieval.py \
   --collection technical_docs
 ```
 
+Inspect failing questions with snippets:
+
+```bash
+python scripts/eval_retrieval.py \
+  --eval eval/boot_bmhd_eval.json \
+  --db vector_db/chroma \
+  --collection technical_docs \
+  --debug-failures
+```
+
 Expected retrieval targets:
 
 ```text
