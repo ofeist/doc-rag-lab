@@ -1,0 +1,62 @@
+[
+  {
+    "id": "dma-cache-001",
+    "question": "Which PMA0 register controls data access cacheability?",
+    "expected_pages": [257],
+    "notes": "Direct register lookup for data access cacheability."
+  },
+  {
+    "id": "dma-cache-002",
+    "question": "Which PMA1 register controls code access cacheability?",
+    "expected_pages": [258],
+    "notes": "Direct register lookup for code access cacheability."
+  },
+  {
+    "id": "dma-cache-003",
+    "question": "What synchronization instructions are required when changing PMA registers to maintain coherency?",
+    "expected_pages": [257, 258, 259],
+    "notes": "Procedure lookup for DSYNC, MTCR, and ISYNC ordering."
+  },
+  {
+    "id": "dma-cache-004",
+    "question": "Which address segments are constrained to non-cacheable data or code accesses?",
+    "expected_pages": [257, 258],
+    "notes": "Segment/cacheability table lookup."
+  },
+  {
+    "id": "dma-cache-005",
+    "question": "What does the PMI program cache provide and how can software invalidate it?",
+    "expected_pages": [310, 312],
+    "notes": "Program cache feature and invalidation lookup."
+  },
+  {
+    "id": "dma-cache-006",
+    "question": "Does the PMI provide automatic cache coherency support?",
+    "expected_pages": [312],
+    "notes": "Negative capability lookup for software cache coherency responsibility."
+  },
+  {
+    "id": "dma-cache-007",
+    "question": "What happens when program cache bypass is enabled with PCON0 PCBYP?",
+    "expected_pages": [312],
+    "notes": "Program cache bypass behavior lookup."
+  },
+  {
+    "id": "dma-cache-008",
+    "question": "How can software generate a DMA request using CHCSR SCH?",
+    "expected_pages": [1442],
+    "notes": "DMA software request exact-name lookup."
+  },
+  {
+    "id": "dma-cache-009",
+    "question": "How are DMA source and destination addresses calculated during a data move?",
+    "expected_pages": [1443, 1454],
+    "notes": "DMA TCOUNT and address generation lookup."
+  },
+  {
+    "id": "dma-cache-010",
+    "question": "What should software do after a DMA channel has entered the reset state?",
+    "expected_pages": [1447, 1454],
+    "notes": "DMA reset and reconfiguration procedure lookup."
+  }
+]

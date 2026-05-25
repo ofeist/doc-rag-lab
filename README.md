@@ -91,6 +91,14 @@ python scripts/extract_pages.py docs/infineon-aurix-tc3xx-part1-usermanual-en.pd
   --out data/raw_pages.jsonl
 ```
 
+Focused extraction from multiple page ranges:
+
+```bash
+python scripts/extract_pages.py docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf \
+  --page-ranges 257-259,307-314,1435-1455,1483-1488 \
+  --out data/raw_pages.jsonl
+```
+
 Output:
 
 ```text
@@ -251,6 +259,55 @@ python scripts/search_chunks.py "PINDIS bit 0 mode selection by configuration pi
 
 For the current PyMuPDF baseline, a good result means page 117 appears in the top 3.
 If it does not, plain text extraction is probably too weak for register/table lookup and we should benchmark PyMuPDF4LLM or Docling next.
+
+## Focused DMA/Cache Index
+
+The second focused retrieval slice checks whether the retrieval approach generalizes beyond Boot/BMHD:
+
+```text
+PDF pages 257-259: PMA data/code cacheability and coherency notes
+PDF pages 307-314: PSPR/DSPR/PMI/PCACHE behavior and invalidation
+PDF pages 1435-1455: DMA requests, reset, move operation, address generation
+PDF pages 1483-1488: DMA checksum, DMARAM initialization, source/destination errors
+```
+
+Build the focused index:
+
+```bash
+python scripts/extract_pages.py docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf \
+  --page-ranges 257-259,307-314,1435-1455,1483-1488 \
+  --out data/raw_pages.jsonl \
+  --no-preview
+
+python scripts/chunk_pages.py \
+  --input data/raw_pages.jsonl \
+  --output data/chunks.jsonl \
+  --source docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf
+
+python scripts/embed_chunks.py \
+  --chunks data/chunks.jsonl \
+  --db vector_db/chroma \
+  --collection technical_docs \
+  --reset
+```
+
+Run the second mini retrieval eval:
+
+```bash
+python scripts/eval_retrieval.py --mode vector --eval eval/dma_cache_eval.json
+python scripts/eval_retrieval.py --mode bm25 --eval eval/dma_cache_eval.json
+python scripts/eval_retrieval.py --mode hybrid --eval eval/dma_cache_eval.json
+```
+
+Current baseline:
+
+```text
+vector: hit@1 90%, hit@3 100%, hit@5 100%
+bm25:   hit@1 80%, hit@3 100%, hit@5 100%
+hybrid: hit@1 90%, hit@3 100%, hit@5 100%
+```
+
+Detailed notes are in `eval/dma_cache_hybrid_baseline.md`.
 
 ## Step 4: First RAG Answer
 
