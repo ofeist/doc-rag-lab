@@ -16,7 +16,9 @@ The retrieval pipeline already supports:
 - BM25 retrieval
 - hybrid retrieval using Reciprocal Rank Fusion (RRF)
 
-This task must add a small, local, reproducible answer-generation layer that uses the existing hybrid retrieval results as context and asks a local LLM to answer with citations.
+This task must add a small, reproducible answer-generation layer that uses the existing hybrid retrieval results as context and calls an OpenAI-compatible chat completions endpoint.
+
+The first implementation must support `--dry-run`, so retrieval, context packing, and prompt construction can be tested without calling any model.
 
 This is not a UI task.
 This is not a parser task.
@@ -39,9 +41,9 @@ Do not change the existing retrieval eval metrics.
 
 Do not add a web UI.
 
-Do not introduce cloud APIs.
+Do not hardcode Ollama.
 
-Do not use proprietary model APIs.
+Do not assume a local model runtime exists.
 
 Do not make the answer generation “smart” with agents, planning, or multi-step reasoning.
 
@@ -67,23 +69,43 @@ The current local focused index is rebuilt by running the existing extraction, c
 
 The answer slice should reuse the current Chroma collection and `data/chunks.jsonl`.
 
-The local LLM should be called through an OpenAI-compatible HTTP endpoint if available.
+The model call must use an OpenAI-compatible endpoint.
 
-Default local endpoint:
-
-```text
-http://localhost:8000/v1/chat/completions
-```
-
-Default model name can be passed by CLI.
-
-Example model placeholder:
+This may be:
 
 ```text
-local-model
+OpenAI API from home
+company-local OpenAI-compatible endpoint
+vLLM OpenAI-compatible server
+Ollama OpenAI-compatible endpoint
+any compatible internal gateway
 ```
 
-The script must also support a dry-run mode so the retrieval/context/prompt can be tested even without a local LLM.
+The task must not depend on one specific provider.
+
+Default endpoint:
+
+```text
+https://api.openai.com/v1
+```
+
+Default model placeholder:
+
+```text
+gpt-5.5
+```
+
+The model and endpoint must be configurable by CLI.
+
+The API key must be read from an environment variable, not hardcoded.
+
+Default environment variable:
+
+```text
+OPENAI_API_KEY
+```
+
+The script must also support `--dry-run`, so retrieval/context/prompt can be tested even when no endpoint or API key is available.
 
 ---
 
@@ -123,8 +145,8 @@ python scripts/ask_chunks.py \
   --chunks data/chunks.jsonl \
   --mode hybrid \
   --top-k 5 \
-  --model local-model \
-  --base-url http://localhost:8000/v1
+  --model gpt-5.5 \
+  --base-url https://api.openai.com/v1
 ```
 
 It must also support dry-run:
@@ -166,13 +188,20 @@ Dry-run must not call any model endpoint.
 --top-k           Default: 5
 --candidate-k     Default: 10. Used for hybrid candidate retrieval.
 --rrf-k           Default: 60
---model           Default: local-model
---base-url        Default: http://localhost:8000/v1
+--model           Default: gpt-5.5
+--base-url        Default: https://api.openai.com/v1
+--api-key-env     Default: OPENAI_API_KEY
 --temperature     Default: 0.0
 --max-tokens      Default: 512
---dry-run         If present, do not call the LLM.
+--dry-run         If present, do not call the model.
 --show-context    If present, print full retrieved context.
 ```
+
+Do not add a positional API key argument.
+
+Do not print the API key.
+
+Do not read secrets from `.env` unless the project already has an established `.env` loader.
 
 ---
 
@@ -218,7 +247,7 @@ Priority:
 
 ## Prompt format
 
-The prompt sent to the local LLM must be strict and citation-oriented.
+The prompt sent to the model must be strict and citation-oriented.
 
 Use this system message:
 
@@ -301,7 +330,7 @@ Prompt:
 
 ---
 
-## Local LLM API behavior
+## OpenAI-compatible API behavior
 
 Use Python standard libraries where reasonable.
 
@@ -319,11 +348,24 @@ Call:
 POST <base-url>/chat/completions
 ```
 
+For the default OpenAI API base URL, that means:
+
+```text
+POST https://api.openai.com/v1/chat/completions
+```
+
+Headers:
+
+```text
+Authorization: Bearer <value from api-key-env>
+Content-Type: application/json
+```
+
 Example payload:
 
 ```json
 {
-  "model": "local-model",
+  "model": "gpt-5.5",
   "messages": [
     {"role": "system", "content": "..."},
     {"role": "user", "content": "..."}
@@ -335,6 +377,7 @@ Example payload:
 
 Handle errors clearly:
 
+- missing API key environment variable
 - connection refused
 - HTTP error
 - malformed response
@@ -383,11 +426,12 @@ Include:
 
 1. how to rebuild a focused index, or reference existing focused index sections
 2. how to run dry-run
-3. how to run with local LLM endpoint
-4. explanation that retrieval eval remains the regression gate
-5. warning that answer quality must not be trusted unless citations are present and retrieval hit is good
+3. how to run with an OpenAI-compatible endpoint
+4. how to set the API key via environment variable
+5. explanation that retrieval eval remains the regression gate
+6. warning that answer quality must not be trusted unless citations are present and retrieval hit is good
 
-Example README commands:
+Example README dry-run command:
 
 ```bash
 python scripts/ask_chunks.py \
@@ -396,6 +440,21 @@ python scripts/ask_chunks.py \
   --top-k 5 \
   --dry-run
 ```
+
+Example README command with OpenAI API:
+
+```bash
+export OPENAI_API_KEY="..."
+
+python scripts/ask_chunks.py \
+  --question "What does the Interrupt Router module schedule?" \
+  --mode hybrid \
+  --top-k 5 \
+  --model gpt-5.5 \
+  --base-url https://api.openai.com/v1
+```
+
+Example README command with another OpenAI-compatible endpoint:
 
 ```bash
 python scripts/ask_chunks.py \
@@ -410,7 +469,7 @@ python scripts/ask_chunks.py \
 
 ## Optional baseline document
 
-If a local LLM endpoint is available, create:
+If an OpenAI-compatible endpoint is available, create:
 
 ```text
 eval/rag_answer_first_baseline.md
@@ -429,14 +488,16 @@ observations:
 known limitations:
 ```
 
-If no local LLM endpoint is available, do not fake results.
+If no endpoint is available, do not fake results.
 
 Instead write:
 
 ```text
-Answer generation baseline not run because no local LLM endpoint was available.
+Answer generation baseline not run because no OpenAI-compatible endpoint was available.
 Dry-run was verified.
 ```
+
+If OpenAI API is used from home, write that clearly, but do not include API keys or sensitive account details.
 
 ---
 
@@ -474,6 +535,19 @@ python3 scripts/ask_chunks.py \
   --dry-run
 ```
 
+Optional real model call, only if an endpoint and API key are available:
+
+```bash
+export OPENAI_API_KEY="..."
+
+python scripts/ask_chunks.py \
+  --question "What does the Interrupt Router module schedule?" \
+  --mode hybrid \
+  --top-k 5 \
+  --model gpt-5.5 \
+  --base-url https://api.openai.com/v1
+```
+
 Run existing retrieval evals to ensure no regression:
 
 ```bash
@@ -505,15 +579,38 @@ git status --short
 The task is complete when:
 
 - `scripts/ask_chunks.py` exists.
-- `--dry-run` works without any LLM endpoint.
+- `--dry-run` works without any model endpoint.
 - The script retrieves context using `--mode hybrid` by default.
 - The prompt contains source ids `[S1]`, `[S2]`, etc.
 - The model instructions require answers only from context.
 - The output displays sources and answer separately.
+- The OpenAI-compatible endpoint is configurable via `--base-url`.
+- The model is configurable via `--model`.
+- The API key is read from an environment variable, default `OPENAI_API_KEY`.
+- No API key or secret is committed, printed, or hardcoded.
 - README contains a short usage section.
 - `examples/rag_answer_questions.txt` exists.
 - Existing retrieval eval behavior is not intentionally changed.
-- No cloud or proprietary model API is introduced.
+
+---
+
+## Model selection note for later
+
+| Step | GPT-5.5? | Note |
+|---|---|---|
+| Find relevant pages | No | Keyword/PDF search |
+| Select page range | Optional | Human decides |
+| Extract pages | No | Local script |
+| Chunking | No | Local script |
+| Embedding/index | No | Local embedding |
+| Write 10 questions | Yes, optional | Useful for drafting |
+| Verify expected_pages | Not as authority | Human must confirm |
+| Run eval | No | Local |
+| Debug failures | Optional | Can help interpret results |
+| Correct eval targets | Optional | Human confirms |
+| Baseline report | Optional | Text only, not metrics |
+| README update | Optional | Wording |
+| Commit/push | No | Git workflow |
 
 ---
 
@@ -538,7 +635,7 @@ Verified:
 
 Results:
 - dry-run: pass/fail
-- local LLM call: pass/fail/not run
+- OpenAI-compatible model call: pass/fail/not run
 - retrieval eval regression: pass/fail/not run
 
 Changed files:
