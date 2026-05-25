@@ -131,6 +131,7 @@ Current slices:
 | `boot_bmhd` | `115-126` | `eval/boot_bmhd_eval.json` | Boot Mode Header and startup firmware flow. Uses `default_max_tokens: 900`. |
 | `dma_cache` | `257-259,307-314,1435-1455,1483-1488` | `eval/dma_cache_eval.json` | DMA/cache coherency, cacheability, and LMU-related questions. |
 | `interrupt_routing` | `1364-1397` | `eval/interrupt_routing_eval.json` | Interrupt Router, SRC, TOS routing, service request terminology. |
+| `memory_map` | `90-102` | `eval/memory_map_eval.json` | Table-heavy MEMMAP address ranges, segment mappings, and SOTA alternate PFLASH mappings. |
 
 The slice manifest is a curated fixture registry for eval/debug work. It is not yet an
 orchestrator.
@@ -141,11 +142,33 @@ Validate it with:
 python scripts/validate_slices_config.py
 ```
 
+### Table-Heavy Eval Slice
+
+The `memory_map` slice was added as a harder retrieval stress test. It covers pages
+`90-102` of the AURIX manual and contains 10 retrieval eval questions.
+
+It was chosen because the section is dense with address-map tables, repeated numeric
+address ranges, repeated Program Flash bank names, and alternate SOTA mappings. This is
+harder than prose-heavy sections and exposes table/chunking weaknesses.
+
+Initial retrieval results:
+
+```text
+vector: hit@1 20%, hit@3 40%, hit@5 40%
+bm25:   hit@1 40%, hit@3 60%, hit@5 70%
+hybrid: hit@1 40%, hit@3 40%, hit@5 40%
+```
+
+The low hybrid result is intentional signal, not a hidden failure. It suggests that the
+current page-local fixed chunking and RRF settings are weak for dense table lookups.
+
 ## 7. Known Limitations
 
 - Ingest is still PyMuPDF text extraction only; tables and diagrams are not handled as
   first-class structured objects.
 - Chunking is page-local fixed token chunking; there is no parent-child retrieval yet.
+- Dense table-heavy address maps can retrieve poorly even when the target text was
+  extracted; `memory_map` is the current stress fixture for this.
 - The slice manifest is not yet wired into a runner.
 - Retrieval eval is focused on expected pages, not complete answer correctness.
 - Answer eval requires a live OpenAI-compatible model endpoint and manual grading.

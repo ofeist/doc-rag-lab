@@ -1,0 +1,62 @@
+[
+  {
+    "id": "memory-map-001",
+    "question": "What do the acronyms BBBBE, SPBBE, SRIBE, and Access mean in the MEMMAP address map tables?",
+    "expected_pages": [90],
+    "notes": "Table 23 acronym definition lookup."
+  },
+  {
+    "id": "memory-map-002",
+    "question": "Which segments allow access to CPU PSPR, DSPR, PCACHE, DCACHE, and related TAG SRAMs?",
+    "expected_pages": [90],
+    "notes": "Segment summary lookup for segments 1 and 3-7."
+  },
+  {
+    "id": "memory-map-003",
+    "question": "What address range and size are listed for CPU0 DSPR in the segment 0 to 14 address map?",
+    "expected_pages": [93],
+    "notes": "Direct table lookup in Table 24."
+  },
+  {
+    "id": "memory-map-004",
+    "question": "What address range and size are listed for CPU0 PSPR in the segment 0 to 14 address map?",
+    "expected_pages": [94],
+    "notes": "Direct table lookup in Table 24."
+  },
+  {
+    "id": "memory-map-005",
+    "question": "In segment 8, which address ranges map to Program Flash 0 through Program Flash 5?",
+    "expected_pages": [94],
+    "notes": "Dense PFLASH address range table lookup."
+  },
+  {
+    "id": "memory-map-006",
+    "question": "Which address range maps to Boot ROM in segment 8 and what are its read and write access types?",
+    "expected_pages": [94],
+    "notes": "Boot ROM range and access type lookup."
+  },
+  {
+    "id": "memory-map-007",
+    "question": "Which address ranges map to Data Flash 0 EEPROM, Data Flash 0 UCB, Data Flash 0 CFS, and Data Flash 1 EEPROM?",
+    "expected_pages": [96],
+    "notes": "Data Flash and UCB/CFS table lookup."
+  },
+  {
+    "id": "memory-map-008",
+    "question": "Compare the segment 9 and segment 11 address ranges for CPU0 DLMU and LMU0 LMURAM.",
+    "expected_pages": [94, 96],
+    "notes": "Comparison across cached and non-cached LMU address map entries."
+  },
+  {
+    "id": "memory-map-009",
+    "question": "For the TC39x alternate SOTA address map, which Program Flash banks appear at 8000 0000H, 8030 0000H, 8060 0000H, and 8090 0000H?",
+    "expected_pages": [97],
+    "notes": "Table 25 alternate segment 8 PFLASH mapping lookup."
+  },
+  {
+    "id": "memory-map-010",
+    "question": "For TC38x alternate SOTA segment 10, what is the PFLASH mapping around A000 0000H through A0BF FFFFH?",
+    "expected_pages": [100],
+    "notes": "Table 32 alternate segment 10 PFLASH mapping lookup."
+  }
+]

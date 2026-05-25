@@ -46,5 +46,21 @@
     "default_rrf_k": 60,
     "default_model": "gpt-5.4-nano",
     "default_max_tokens": 400
+  },
+  "memory_map": {
+    "description": "Table-heavy MEMMAP address map, segment, and alternate SOTA PFLASH mapping slice.",
+    "pdf": "docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf",
+    "page_ranges": "90-102",
+    "doc_id": "memory_map",
+    "collection": "technical_docs",
+    "eval": "eval/memory_map_eval.json",
+    "answer_output": "eval/rag_answer_memory_map_gpt54nano_batch.jsonl",
+    "grading": "eval/rag_answer_memory_map_gpt54nano_batch_grading.md",
+    "default_retrieval_mode": "hybrid",
+    "default_top_k": 3,
+    "default_candidate_k": 8,
+    "default_rrf_k": 60,
+    "default_model": "gpt-5.4-nano",
+    "default_max_tokens": 700
   }
 }
