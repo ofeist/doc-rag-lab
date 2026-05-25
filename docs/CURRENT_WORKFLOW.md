@@ -140,6 +140,16 @@ Current slices:
 The slice manifest is a curated fixture registry for eval/debug work. It is not yet an
 orchestrator.
 
+Per-slice recommended settings are recorded in the manifest because one global retrieval
+default is not ideal for every content type:
+
+| Slice | Chunk tokens | Overlap tokens | Retrieval mode |
+| --- | ---: | ---: | --- |
+| `boot_bmhd` | 800 | 120 | `hybrid` |
+| `dma_cache` | 800 | 120 | `hybrid` |
+| `interrupt_routing` | 800 | 120 | `hybrid` |
+| `memory_map` | 300 | 60 | `bm25_first_hybrid` |
+
 Validate it with:
 
 ```bash
@@ -167,6 +177,8 @@ bm25_first_hybrid: hit@1 40%, hit@3 60%, hit@5 70%
 The low hybrid result is intentional signal, not a hidden failure. It suggests that the
 current page-local fixed chunking and RRF settings are weak for dense table lookups.
 The `bm25_first_hybrid` experiment avoids the RRF regression but does not beat BM25.
+The current recommended `memory_map` settings are 300 token chunks, 60 token overlap, and
+`bm25_first_hybrid` retrieval.
 
 ## 7. Known Limitations
 

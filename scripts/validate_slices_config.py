@@ -21,6 +21,9 @@ REQUIRED_FIELDS = [
     "default_rrf_k",
     "default_model",
     "default_max_tokens",
+    "recommended_chunk_tokens",
+    "recommended_overlap_tokens",
+    "recommended_retrieval_mode",
 ]
 
 

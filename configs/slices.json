@@ -13,7 +13,10 @@
     "default_candidate_k": 8,
     "default_rrf_k": 60,
     "default_model": "gpt-5.4-nano",
-    "default_max_tokens": 900
+    "default_max_tokens": 900,
+    "recommended_chunk_tokens": 800,
+    "recommended_overlap_tokens": 120,
+    "recommended_retrieval_mode": "hybrid"
   },
   "dma_cache": {
     "description": "DMA, cache coherency, cacheability, and LMU-related slice.",
@@ -29,7 +32,10 @@
     "default_candidate_k": 8,
     "default_rrf_k": 60,
     "default_model": "gpt-5.4-nano",
-    "default_max_tokens": 500
+    "default_max_tokens": 500,
+    "recommended_chunk_tokens": 800,
+    "recommended_overlap_tokens": 120,
+    "recommended_retrieval_mode": "hybrid"
   },
   "interrupt_routing": {
     "description": "Interrupt Router, service request, SRC, TOS routing, and CPU service provider slice.",
@@ -45,7 +51,10 @@
     "default_candidate_k": 8,
     "default_rrf_k": 60,
     "default_model": "gpt-5.4-nano",
-    "default_max_tokens": 400
+    "default_max_tokens": 400,
+    "recommended_chunk_tokens": 800,
+    "recommended_overlap_tokens": 120,
+    "recommended_retrieval_mode": "hybrid"
   },
   "memory_map": {
     "description": "Table-heavy MEMMAP address map, segment, and alternate SOTA PFLASH mapping slice.",
@@ -61,6 +70,9 @@
     "default_candidate_k": 8,
     "default_rrf_k": 60,
     "default_model": "gpt-5.4-nano",
-    "default_max_tokens": 700
+    "default_max_tokens": 700,
+    "recommended_chunk_tokens": 300,
+    "recommended_overlap_tokens": 60,
+    "recommended_retrieval_mode": "bm25_first_hybrid"
   }
 }
