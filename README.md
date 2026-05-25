@@ -392,7 +392,8 @@ python scripts/ask_chunks.py \
   --mode hybrid \
   --top-k 5 \
   --model local-model \
-  --base-url http://localhost:8000/v1
+  --base-url http://localhost:8000/v1 \
+  --token-param max_tokens
 ```
 
 Important:
@@ -401,6 +402,7 @@ Important:
 - Verify citations like [S1], [S2] are present in the answer.
 - Treat no-citation answers as ungrounded.
 - Keep running retrieval eval slices (boot/dma/interrupt) after retrieval changes.
+- Use --token-param max_tokens for endpoints that do not support max_completion_tokens.
 ```
 
 ## Step 4: First RAG Answer

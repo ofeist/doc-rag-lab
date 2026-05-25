@@ -27,6 +27,7 @@ DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
 DEFAULT_API_KEY_ENV = "OPENAI_API_KEY"
 DEFAULT_TIMEOUT_SECONDS = 60
+DEFAULT_TOKEN_PARAM = "max_completion_tokens"
 
 SYSTEM_PROMPT = """You are a technical documentation assistant.
 Answer only using the provided context.
@@ -142,11 +143,17 @@ def rrf_fuse(
             if key not in fused:
                 fused[key] = dict(row)
                 fused[key]["rrf_score"] = 0.0
+            else:
+                for field in ("document", "meta", "bm25_score"):
+                    if field in row and fused[key].get(field) is None:
+                        fused[key][field] = row[field]
             fused[key]["rrf_score"] += 1.0 / (rrf_k + rank)
             if source_name == "vector":
                 fused[key]["vector_rank"] = rank
             else:
                 fused[key]["bm25_rank"] = rank
+                if "bm25_score" in row:
+                    fused[key]["bm25_score"] = row["bm25_score"]
 
     ranked = sorted(fused.values(), key=lambda row: row["rrf_score"], reverse=True)
     for rank, row in enumerate(ranked, start=1):
@@ -221,6 +228,7 @@ def build_run_record(
     sources: list[dict[str, Any]],
     answer: str | None,
     dry_run: bool,
+    token_param: str,
 ) -> dict[str, Any]:
     return {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -237,6 +245,7 @@ def build_run_record(
         "sources": sources,
         "answer": answer,
         "dry_run": dry_run,
+        "token_param": token_param,
     }
 
 
@@ -261,6 +270,7 @@ def call_openai_compatible(
     user_prompt: str,
     temperature: float | None,
     max_tokens: int,
+    token_param: str,
     timeout_seconds: int,
 ) -> str:
     url = base_url.rstrip("/") + "/chat/completions"
@@ -274,7 +284,7 @@ def call_openai_compatible(
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
-        "max_completion_tokens": max_tokens,
+        token_param: max_tokens,
     }
     if temperature is not None:
         payload["temperature"] = temperature
@@ -333,6 +343,12 @@ def main() -> int:
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help="OpenAI-compatible base URL.")
     parser.add_argument("--api-key-env", default=DEFAULT_API_KEY_ENV, help="API key env var name.")
     parser.add_argument("--max-tokens", type=int, default=512, help="Max output tokens.")
+    parser.add_argument(
+        "--token-param",
+        choices=["max_completion_tokens", "max_tokens"],
+        default=DEFAULT_TOKEN_PARAM,
+        help="Token limit payload field sent to the chat completions endpoint.",
+    )
     parser.add_argument(
         "--timeout-seconds",
         type=int,
@@ -462,6 +478,7 @@ def main() -> int:
                     sources=source_records,
                     answer=None,
                     dry_run=True,
+                    token_param=args.token_param,
                 ),
             )
             print()
@@ -482,6 +499,7 @@ def main() -> int:
             user_prompt=user_prompt,
             temperature=args.temperature,
             max_tokens=args.max_tokens,
+            token_param=args.token_param,
             timeout_seconds=args.timeout_seconds,
         )
     except RuntimeError as exc:
@@ -509,6 +527,7 @@ def main() -> int:
                 sources=source_records,
                 answer=answer,
                 dry_run=False,
+                token_param=args.token_param,
             ),
         )
         print()
