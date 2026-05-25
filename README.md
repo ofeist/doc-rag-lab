@@ -405,6 +405,34 @@ Important:
 - Use --token-param max_tokens for endpoints that do not support max_completion_tokens.
 ```
 
+Batch answer eval:
+
+```bash
+python scripts/run_answer_eval.py \
+  --eval eval/interrupt_routing_eval.json \
+  --mode hybrid \
+  --top-k 3 \
+  --candidate-k 8 \
+  --model gpt-5.4-nano \
+  --base-url https://api.openai.com/v1 \
+  --output-jsonl eval/rag_answer_interrupt_gpt54nano_batch.jsonl
+```
+
+Dry-run batch smoke test:
+
+```bash
+python scripts/run_answer_eval.py \
+  --eval eval/interrupt_routing_eval.json \
+  --limit 2 \
+  --mode hybrid \
+  --top-k 3 \
+  --candidate-k 8 \
+  --dry-run \
+  --output-jsonl /tmp/rag_answer_batch_dry_run.jsonl
+```
+
+Manual grading stays human-reviewed for now. Use `eval/rag_answer_manual_grading_template.md` as the report format.
+
 ## Step 4: First RAG Answer
 
 `scripts/ask_chunks.py` expects an OpenAI-compatible chat completion endpoint.
@@ -419,7 +447,8 @@ export LLM_MODEL="qwen2.5:7b"
 Ask a question:
 
 ```bash
-python scripts/ask_chunks.py "What does the document say about reset behavior?" \
+python scripts/ask_chunks.py \
+  --question "What does the document say about reset behavior?" \
   --db vector_db/chroma \
   --collection technical_docs
 ```
@@ -427,7 +456,8 @@ python scripts/ask_chunks.py "What does the document say about reset behavior?" 
 To debug retrieval context:
 
 ```bash
-python scripts/ask_chunks.py "What does the document say about reset behavior?" \
+python scripts/ask_chunks.py \
+  --question "What does the document say about reset behavior?" \
   --db vector_db/chroma \
   --collection technical_docs \
   --show-context
