@@ -7,7 +7,12 @@ from pathlib import Path
 import fitz
 
 
-def extract_pages(pdf_path: Path, max_pages: int | None = None) -> list[dict]:
+def extract_pages(
+    pdf_path: Path,
+    max_pages: int | None = None,
+    page_start: int = 1,
+    page_end: int | None = None,
+) -> list[dict]:
     """
     Extract text from a PDF page-by-page.
 
@@ -20,9 +25,22 @@ def extract_pages(pdf_path: Path, max_pages: int | None = None) -> list[dict]:
     records: list[dict] = []
 
     total_pages = len(doc)
-    pages_to_process = total_pages if max_pages is None else min(max_pages, total_pages)
+    if page_start < 1:
+        raise ValueError("--page-start must be >= 1")
+    if page_start > total_pages:
+        raise ValueError(f"--page-start exceeds PDF page count ({total_pages})")
+    if page_end is not None and page_end < page_start:
+        raise ValueError("--page-end must be >= --page-start")
 
-    for page_index in range(pages_to_process):
+    start_index = page_start - 1
+    end_index = total_pages if page_end is None else min(page_end, total_pages)
+
+    if max_pages is not None:
+        if max_pages < 1:
+            raise ValueError("--max-pages must be >= 1")
+        end_index = min(end_index, start_index + max_pages)
+
+    for page_index in range(start_index, end_index):
         page = doc[page_index]
         text = page.get_text("text")
 
@@ -77,7 +95,19 @@ def main() -> None:
         "--max-pages",
         type=int,
         default=None,
-        help="Optional limit for smoke testing, e.g. --max-pages 10",
+        help="Optional page count limit for smoke testing, e.g. --max-pages 10",
+    )
+    parser.add_argument(
+        "--page-start",
+        type=int,
+        default=1,
+        help="First PDF page to extract, 1-based. Default: 1",
+    )
+    parser.add_argument(
+        "--page-end",
+        type=int,
+        default=None,
+        help="Last PDF page to extract, 1-based and inclusive.",
     )
     parser.add_argument(
         "--no-preview",
@@ -87,7 +117,12 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    records = extract_pages(args.pdf, args.max_pages)
+    records = extract_pages(
+        args.pdf,
+        max_pages=args.max_pages,
+        page_start=args.page_start,
+        page_end=args.page_end,
+    )
     write_jsonl(records, args.out)
 
     print(f"Extracted pages: {len(records)}")

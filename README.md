@@ -82,6 +82,15 @@ Optional smoke test with only the first 10 pages:
 python scripts/extract_pages.py docs/sample.pdf --max-pages 10
 ```
 
+Focused extraction from a specific page range:
+
+```bash
+python scripts/extract_pages.py docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf \
+  --page-start 115 \
+  --page-end 126 \
+  --out data/raw_pages.jsonl
+```
+
 Output:
 
 ```text
@@ -143,6 +152,78 @@ python scripts/search_chunks.py "reset behavior" \
 ```
 
 This step is intentionally before the LLM. If search returns bad chunks, the LLM will only make the bad retrieval look nicer.
+
+## Focused Boot/BMHD Index
+
+For the first meaningful retrieval test, do not index the whole 2080-page PDF.
+Use a small real-content slice from the AURIX startup chapter:
+
+```text
+PDF pages 115-126
+topic: startup, Boot Mode Header (BMHD), Alternate Boot Mode (ABM), no-valid-BMHD handling
+```
+
+This range is small, fast to re-index, and includes prose, procedures, and Table 45.
+
+Build the focused index:
+
+```bash
+python scripts/extract_pages.py docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf \
+  --page-start 115 \
+  --page-end 126 \
+  --out data/raw_pages.jsonl \
+  --no-preview
+
+python scripts/chunk_pages.py \
+  --input data/raw_pages.jsonl \
+  --output data/chunks.jsonl \
+  --source docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf
+
+python scripts/embed_chunks.py \
+  --chunks data/chunks.jsonl \
+  --db vector_db/chroma \
+  --collection technical_docs \
+  --reset
+```
+
+Quick metadata check:
+
+```bash
+rg '"page_start": null|"page_end": null' data/chunks.jsonl
+```
+
+The command should print nothing.
+
+Retrieval quality checks:
+
+```bash
+python scripts/search_chunks.py "Boot Mode Header BMI HWCFG" --db vector_db/chroma --collection technical_docs
+python scripts/search_chunks.py "PINDIS bit 0 mode selection by configuration pins" --db vector_db/chroma --collection technical_docs
+python scripts/search_chunks.py "Alternate Boot Mode Header STADABM" --db vector_db/chroma --collection technical_docs
+python scripts/search_chunks.py "what happens if no valid Boot Mode Header is found" --db vector_db/chroma --collection technical_docs
+python scripts/search_chunks.py "RAM overwrite during startup CPU0 DSPR PSPR" --db vector_db/chroma --collection technical_docs
+python scripts/search_chunks.py "CRC calculation ABMHD CHKSTART CHKEND" --db vector_db/chroma --collection technical_docs
+```
+
+Expected retrieval targets:
+
+```text
+BMHD / BMI / HWCFG / PINDIS: pages 117-119
+ABM / STADABM / CHKSTART / CHKEND: pages 121-123
+no valid BMHD handling: pages 123-126
+RAM overwrite during startup: page 115
+```
+
+Table extraction check:
+
+```bash
+python scripts/search_chunks.py "PINDIS bit 0 mode selection by configuration pins" \
+  --db vector_db/chroma \
+  --collection technical_docs
+```
+
+For the current PyMuPDF baseline, a good result means page 117 appears in the top 3.
+If it does not, plain text extraction is probably too weak for register/table lookup and we should benchmark PyMuPDF4LLM or Docling next.
 
 ## Step 4: First RAG Answer
 
