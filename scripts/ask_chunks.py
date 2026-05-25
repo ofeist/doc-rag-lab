@@ -213,8 +213,9 @@ def call_openai_compatible(
             {"role": "user", "content": user_prompt},
         ],
         "temperature": temperature,
-        "max_tokens": max_tokens,
     }
+    if temperature is not None:
+        payload["temperature"] = temperature
     try:
         response = requests.post(url, headers=headers, json=payload, timeout=timeout_seconds)
     except requests.RequestException as exc:
@@ -269,7 +270,6 @@ def main() -> int:
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Model name.")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help="OpenAI-compatible base URL.")
     parser.add_argument("--api-key-env", default=DEFAULT_API_KEY_ENV, help="API key env var name.")
-    parser.add_argument("--temperature", type=float, default=0.0, help="Model temperature.")
     parser.add_argument("--max-tokens", type=int, default=512, help="Max output tokens.")
     parser.add_argument(
         "--timeout-seconds",
@@ -279,6 +279,12 @@ def main() -> int:
     )
     parser.add_argument("--dry-run", action="store_true", help="Do not call model endpoint.")
     parser.add_argument("--show-context", action="store_true", help="Print full retrieved context.")
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        help="Optional model temperature. If omitted, endpoint default is used.",
+    )
     args = parser.parse_args()
 
     db_path = Path(args.db)
