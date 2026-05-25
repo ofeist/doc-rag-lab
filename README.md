@@ -224,6 +224,14 @@ python scripts/eval_retrieval.py \
   --debug-failures
 ```
 
+Compare retrieval modes:
+
+```bash
+python scripts/eval_retrieval.py --mode vector --eval eval/boot_bmhd_eval.json
+python scripts/eval_retrieval.py --mode bm25 --eval eval/boot_bmhd_eval.json
+python scripts/eval_retrieval.py --mode hybrid --eval eval/boot_bmhd_eval.json
+```
+
 Expected retrieval targets:
 
 ```text
