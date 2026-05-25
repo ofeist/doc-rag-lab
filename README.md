@@ -62,9 +62,21 @@ On Git Bash for Windows, activation may be:
 source .venv/Scripts/activate
 ```
 
-## Repeatable Slice Ingest
+## Repeatable Document Ingest
 
-Use `scripts/ingest_document.py` to run the focused slice pipeline end to end:
+Use `scripts/ingest_document.py` to run the document ingest pipeline end to end:
+
+```bash
+python scripts/ingest_document.py \
+  --pdf docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf \
+  --doc-id aurix_tc3xx_part1 \
+  --collection technical_docs \
+  --reset
+```
+
+By default, omitted `--page-ranges` means full-document ingest.
+
+Use `--page-ranges` for focused eval/debug slices:
 
 ```bash
 python scripts/ingest_document.py \
@@ -89,12 +101,12 @@ data/chunks.jsonl
 vector_db/chroma
 ```
 
-`--doc-id` is written into raw page and chunk metadata so focused slices can later move to
-manifest-driven ingest and filtering.
+`--doc-id` is written into raw page and chunk metadata so ingested documents and focused
+slices can later move to manifest-driven ingest and filtering.
 
 ## Slice Manifest
 
-Known focused RAG slices are recorded in:
+Known focused RAG eval/debug slices are recorded in:
 
 ```text
 configs/slices.json
@@ -113,8 +125,8 @@ grading report
 default retrieval/model settings
 ```
 
-For now the manifest is documentation/config only. It is intended to support future helper
-scripts such as:
+For now the manifest is a curated eval/debug fixture registry, not the main ingest workflow.
+It is documentation/config only and is intended to support future helper scripts such as:
 
 ```bash
 python scripts/run_slice_eval.py --slice boot_bmhd --overwrite

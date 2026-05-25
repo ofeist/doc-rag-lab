@@ -24,7 +24,7 @@ def add_doc_id(records: list[dict], doc_id: str) -> list[dict]:
 def print_summary(
     doc_id: str,
     pdf: Path,
-    page_ranges: str,
+    page_ranges: str | None,
     raw_pages_path: Path,
     chunks_path: Path,
     db_path: Path,
@@ -35,7 +35,7 @@ def print_summary(
     summary = {
         "doc_id": doc_id,
         "pdf": str(pdf),
-        "page_ranges": page_ranges,
+        "page_ranges": page_ranges or "full",
         "raw_pages": str(raw_pages_path),
         "chunks": str(chunks_path),
         "db": str(db_path),
@@ -50,13 +50,13 @@ def print_summary(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Run the focused PDF slice ingest pipeline: extract, chunk, embed."
+        description="Run the PDF ingest pipeline: extract, chunk, embed."
     )
     parser.add_argument("--pdf", type=Path, required=True, help="Path to the source PDF.")
     parser.add_argument(
         "--page-ranges",
-        required=True,
-        help="Comma-separated 1-based PDF page ranges, e.g. 115-126,257,310-312.",
+        default=None,
+        help="Optional comma-separated 1-based PDF page ranges, e.g. 115-126,257,310-312. Omit for full PDF ingest.",
     )
     parser.add_argument("--doc-id", required=True, help="Stable slice/document id added to metadata.")
     parser.add_argument("--raw-pages", type=Path, default=DEFAULT_RAW_PAGES, help="Raw pages JSONL path.")
