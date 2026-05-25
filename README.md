@@ -356,6 +356,53 @@ hybrid: hit@1 70%, hit@3 100%, hit@5 100%
 
 Detailed notes are in `eval/interrupt_routing_hybrid_baseline.md`.
 
+## First Grounded RAG Answer
+
+This slice adds a strict citation-first answer layer on top of retrieval.
+Retrieval eval remains the regression gate. If retrieval misses relevant pages, answer quality is not trustworthy.
+
+Dry-run (no model call):
+
+```bash
+python scripts/ask_chunks.py \
+  --question "What does the Interrupt Router module schedule?" \
+  --mode hybrid \
+  --top-k 5 \
+  --dry-run
+```
+
+OpenAI API example:
+
+```bash
+export OPENAI_API_KEY="..."
+
+python scripts/ask_chunks.py \
+  --question "What does the Interrupt Router module schedule?" \
+  --mode hybrid \
+  --top-k 5 \
+  --model gpt-5.5 \
+  --base-url https://api.openai.com/v1
+```
+
+Another OpenAI-compatible endpoint example:
+
+```bash
+python scripts/ask_chunks.py \
+  --question "What does the Interrupt Router module schedule?" \
+  --mode hybrid \
+  --top-k 5 \
+  --model local-model \
+  --base-url http://localhost:8000/v1
+```
+
+Important:
+
+```text
+- Verify citations like [S1], [S2] are present in the answer.
+- Treat no-citation answers as ungrounded.
+- Keep running retrieval eval slices (boot/dma/interrupt) after retrieval changes.
+```
+
 ## Step 4: First RAG Answer
 
 `scripts/ask_chunks.py` expects an OpenAI-compatible chat completion endpoint.

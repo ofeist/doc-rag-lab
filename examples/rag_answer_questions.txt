@@ -1,0 +1,8 @@
+What does the Interrupt Router module schedule?
+What does the SRPN field define in the SRC register?
+Which TOS encoding maps a service request to DMA?
+What sequence is required to change SRC TOS or SRPN for an enabled Service Request Node?
+Does the PMI provide automatic cache coherency support?
+What synchronization instructions are required when changing PMA registers to maintain coherency?
+What does the Boot Mode Header contain?
+How is a valid Boot Mode Header selected?

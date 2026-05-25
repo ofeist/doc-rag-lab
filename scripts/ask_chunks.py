@@ -1,216 +1,401 @@
 #!/usr/bin/env python3
 
 import argparse
+import json
 import os
-import sys
+import re
 from pathlib import Path
 from typing import Any
 
 import chromadb
 import requests
 from chromadb.config import Settings
+from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
 
 
-DEFAULT_EMBEDDING_MODEL = os.getenv("RAG_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
-DEFAULT_LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://localhost:11434/v1")
-DEFAULT_LLM_MODEL = os.getenv("LLM_MODEL", "qwen2.5:7b")
-DEFAULT_LLM_API_KEY = os.getenv("LLM_API_KEY", "")
-
+DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+DEFAULT_DB = "vector_db/chroma"
+DEFAULT_COLLECTION = "technical_docs"
+DEFAULT_CHUNKS = "data/chunks.jsonl"
+DEFAULT_MODE = "hybrid"
+DEFAULT_TOP_K = 5
+DEFAULT_CANDIDATE_K = 10
+DEFAULT_RRF_K = 60
+DEFAULT_MODEL = "gpt-5.5"
+DEFAULT_BASE_URL = "https://api.openai.com/v1"
+DEFAULT_API_KEY_ENV = "OPENAI_API_KEY"
+DEFAULT_TIMEOUT_SECONDS = 60
 
 SYSTEM_PROMPT = """You are a technical documentation assistant.
-
-Rules:
-- Use ONLY the provided documentation context.
-- Do NOT answer from general knowledge.
-- If the answer is not present in the context, say: "Not found in the provided documentation context."
-- Keep the answer concise and technical.
-- Always mention which sources support the answer.
-- If the context is weak or incomplete, say so.
-"""
+Answer only using the provided context.
+If the provided context is not sufficient, say: "The provided context is not sufficient to answer this question."
+Do not use outside knowledge.
+Always cite sources using the provided source ids like [S1], [S2].
+Keep the answer concise and technical."""
 
 
-def build_context(results: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
-    documents = results.get("documents", [[]])[0]
-    metadatas = results.get("metadatas", [[]])[0]
-    distances = results.get("distances", [[]])[0]
-
-    context_blocks = []
-    source_debug = []
-
-    for idx, (doc, meta, distance) in enumerate(zip(documents, metadatas, distances), start=1):
-        source = meta.get("source", "unknown")
-        page_start = meta.get("page_start", "unknown")
-        page_end = meta.get("page_end", page_start)
-        chunk_index = meta.get("chunk_index", "unknown")
-
-        source_label = (
-            f"S{idx}: source={source}, "
-            f"page_start={page_start}, page_end={page_end}, chunk_index={chunk_index}"
-        )
-        context_blocks.append(f"[{source_label}]\n{doc}\n")
-        source_debug.append(
-            {
-                "rank": idx,
-                "source": source,
-                "page_start": page_start,
-                "page_end": page_end,
-                "chunk_index": chunk_index,
-                "distance": distance,
-            }
-        )
-
-    return "\n---\n".join(context_blocks), source_debug
+def load_chunks(path: Path) -> list[dict[str, Any]]:
+    chunks: list[dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as f:
+        for line_number, line in enumerate(f, start=1):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                chunks.append(json.loads(stripped))
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Invalid JSON on line {line_number} in {path}") from exc
+    if not chunks:
+        raise ValueError(f"No chunks found in: {path}")
+    return chunks
 
 
-def call_llm(
-    *,
-    base_url: str,
-    model: str,
-    api_key: str,
-    question: str,
-    context: str,
-    timeout_seconds: int,
-) -> str:
-    url = base_url.rstrip("/") + "/chat/completions"
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-
-    user_prompt = f"""Documentation context:
-
-{context}
-
-Question:
-{question}
-
-Answer format:
-
-Answer:
-...
-
-Sources:
-- ...
-
-Limitations:
-...
-"""
-
-    payload = {
-        "model": model,
-        "temperature": 0.1,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
+def safe_metadata(chunk: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "source": str(chunk.get("source", "")),
+        "page_start": int(chunk.get("page_start", -1)),
+        "page_end": int(chunk.get("page_end", -1)),
+        "chunk_index": int(chunk.get("chunk_index", -1)),
+        "page_chunk_index": int(chunk.get("page_chunk_index", -1)),
+        "token_count": int(chunk.get("token_count", -1)),
     }
 
-    response = requests.post(url, headers=headers, json=payload, timeout=timeout_seconds)
-    if response.status_code >= 400:
-        raise RuntimeError(f"LLM request failed: HTTP {response.status_code}\n{response.text}")
 
-    data = response.json()
-    try:
-        return data["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError) as exc:
-        raise RuntimeError(f"Unexpected LLM response format:\n{data}") from exc
+def tokenize(text: str) -> list[str]:
+    return re.findall(r"[a-z0-9_]+", text.lower())
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Ask a question using retrieved ChromaDB chunks and an OpenAI-compatible LLM."
-    )
-    parser.add_argument("question", help="Question to ask against the indexed documentation.")
-    parser.add_argument("--db", default="vector_db/chroma", help="Persistent ChromaDB directory.")
-    parser.add_argument("--chroma-dir", dest="db", help="Alias for --db.")
-    parser.add_argument("--collection", default="technical_docs", help="Chroma collection name.")
-    parser.add_argument(
-        "--embedding-model",
-        default=DEFAULT_EMBEDDING_MODEL,
-        help="SentenceTransformers embedding model. Must match embed_chunks.py.",
-    )
-    parser.add_argument("--top-k", type=int, default=5, help="Number of chunks to retrieve.")
-    parser.add_argument(
-        "--llm-base-url",
-        default=DEFAULT_LLM_BASE_URL,
-        help=f"OpenAI-compatible base URL. Default: {DEFAULT_LLM_BASE_URL}",
-    )
-    parser.add_argument(
-        "--llm-model",
-        default=DEFAULT_LLM_MODEL,
-        help=f"LLM model name. Default: {DEFAULT_LLM_MODEL}",
-    )
-    parser.add_argument("--llm-api-key", default=DEFAULT_LLM_API_KEY, help="LLM API key.")
-    parser.add_argument("--timeout-seconds", type=int, default=120, help="LLM request timeout.")
-    parser.add_argument("--show-context", action="store_true", help="Print retrieved context.")
-    args = parser.parse_args()
-
-    db_path = Path(args.db)
-    if not db_path.is_dir():
-        print(f"ERROR: Chroma directory not found: {db_path}", file=sys.stderr)
-        print("Run scripts/embed_chunks.py first.", file=sys.stderr)
-        return 1
-
-    print(f"Loading embedding model: {args.embedding_model}")
-    embedding_model = SentenceTransformer(args.embedding_model)
-
-    client = chromadb.PersistentClient(
-        path=str(db_path),
-        settings=Settings(anonymized_telemetry=False),
-    )
-
-    try:
-        collection = client.get_collection(name=args.collection)
-    except Exception as exc:
-        print(f"ERROR: Could not open Chroma collection '{args.collection}'.", file=sys.stderr)
-        print(str(exc), file=sys.stderr)
-        return 1
-
-    query_embedding = embedding_model.encode(
-        [args.question],
+def vector_search(
+    *,
+    collection: Any,
+    model: SentenceTransformer,
+    query: str,
+    top_k: int,
+) -> list[dict[str, Any]]:
+    query_embedding = model.encode(
+        [query],
         normalize_embeddings=True,
         show_progress_bar=False,
     ).tolist()[0]
 
     results = collection.query(
         query_embeddings=[query_embedding],
-        n_results=args.top_k,
+        n_results=top_k,
         include=["documents", "metadatas", "distances"],
     )
+    metas = results["metadatas"][0]
+    distances = results["distances"][0]
+    documents = results["documents"][0]
 
-    context, source_debug = build_context(results)
-
-    print("\nQuestion:")
-    print(args.question)
-
-    print("\nRetrieved sources:")
-    for item in source_debug:
-        print(
-            f"{item['rank']}. distance={item['distance']:.4f} "
-            f"source={item['source']} "
-            f"page={item['page_start']}-{item['page_end']} "
-            f"chunk={item['chunk_index']}"
+    rows: list[dict[str, Any]] = []
+    for rank, (meta, distance, document) in enumerate(zip(metas, distances, documents), start=1):
+        rows.append(
+            {
+                "key": int(meta.get("chunk_index", rank - 1)),
+                "meta": meta,
+                "distance": float(distance),
+                "document": str(document),
+                "vector_rank": rank,
+            }
         )
+    return rows
 
-    if args.show_context:
-        print("\nRetrieved context:")
-        print(context)
+
+def bm25_search(
+    *,
+    bm25: BM25Okapi,
+    chunks: list[dict[str, Any]],
+    query: str,
+    top_k: int,
+) -> list[dict[str, Any]]:
+    scores = bm25.get_scores(tokenize(query))
+    ranked_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
+
+    rows: list[dict[str, Any]] = []
+    for rank, index in enumerate(ranked_indices, start=1):
+        chunk = chunks[index]
+        rows.append(
+            {
+                "key": int(chunk.get("chunk_index", index)),
+                "meta": safe_metadata(chunk),
+                "distance": -float(scores[index]),
+                "bm25_score": float(scores[index]),
+                "document": str(chunk.get("text", "")),
+                "bm25_rank": rank,
+            }
+        )
+    return rows
+
+
+def rrf_fuse(
+    vector_rows: list[dict[str, Any]],
+    bm25_rows: list[dict[str, Any]],
+    top_k: int,
+    rrf_k: int,
+) -> list[dict[str, Any]]:
+    fused: dict[int, dict[str, Any]] = {}
+    for source_name, rows in (("vector", vector_rows), ("bm25", bm25_rows)):
+        for rank, row in enumerate(rows, start=1):
+            key = int(row["key"])
+            if key not in fused:
+                fused[key] = dict(row)
+                fused[key]["rrf_score"] = 0.0
+            fused[key]["rrf_score"] += 1.0 / (rrf_k + rank)
+            if source_name == "vector":
+                fused[key]["vector_rank"] = rank
+            else:
+                fused[key]["bm25_rank"] = rank
+
+    ranked = sorted(fused.values(), key=lambda row: row["rrf_score"], reverse=True)
+    for rank, row in enumerate(ranked, start=1):
+        row["distance"] = -row["rrf_score"]
+        row["hybrid_rank"] = rank
+    return ranked[:top_k]
+
+
+def build_context_and_sources(rows: list[dict[str, Any]]) -> tuple[str, list[str]]:
+    blocks: list[str] = []
+    source_lines: list[str] = []
+    for idx, row in enumerate(rows, start=1):
+        meta = row["meta"]
+        sid = f"S{idx}"
+        source = str(meta.get("source", "unknown"))
+        page_start = int(meta.get("page_start", -1))
+        page_end = int(meta.get("page_end", page_start))
+        chunk_index = int(meta.get("chunk_index", -1))
+        score = row.get("distance", 0.0)
+        source_lines.append(
+            f"[{sid}] pages {page_start}-{page_end} chunk={chunk_index} score={score:.4f}"
+        )
+        blocks.append(
+            f"[{sid}]\n"
+            f"source: {source}\n"
+            f"pages: {page_start}-{page_end}\n"
+            f"chunk_id: {chunk_index}\n"
+            f"text:\n{row.get('document', '')}\n"
+        )
+    return "\n".join(blocks), source_lines
+
+
+def build_user_prompt(question: str, context: str) -> str:
+    return (
+        "Question:\n"
+        f"{question}\n\n"
+        "Context:\n"
+        f"{context}\n\n"
+        "Answer requirements:\n"
+        "- Answer only from the context above.\n"
+        "- Include citations like [S1] or [S2].\n"
+        "- If the context is insufficient, say so explicitly.\n"
+    )
+
+
+def call_openai_compatible(
+    *,
+    base_url: str,
+    model: str,
+    api_key: str,
+    user_prompt: str,
+    temperature: float,
+    max_tokens: int,
+    timeout_seconds: int,
+) -> str:
+    url = base_url.rstrip("/") + "/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=timeout_seconds)
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Connection error: {exc}. Use --dry-run to verify retrieval/prompt.")
+
+    if response.status_code >= 400:
+        raise RuntimeError(
+            f"Model endpoint error HTTP {response.status_code}: {response.text}. "
+            "Use --dry-run to verify retrieval/prompt."
+        )
 
     try:
-        answer = call_llm(
-            base_url=args.llm_base_url,
-            model=args.llm_model,
-            api_key=args.llm_api_key,
-            question=args.question,
-            context=context,
-            timeout_seconds=args.timeout_seconds,
-        )
-    except Exception as exc:
-        print("\nERROR while calling LLM:", file=sys.stderr)
-        print(str(exc), file=sys.stderr)
+        data = response.json()
+    except ValueError as exc:
+        raise RuntimeError("Malformed JSON response from model endpoint.") from exc
+
+    try:
+        content = data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise RuntimeError("Model response missing choices[0].message.content.") from exc
+
+    if not content:
+        raise RuntimeError("Model returned an empty answer.")
+    return str(content)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="First grounded RAG answer slice (CLI).")
+    parser.add_argument("--question", required=True, help="User question.")
+    parser.add_argument("--db", default=DEFAULT_DB, help="Persistent ChromaDB directory.")
+    parser.add_argument("--collection", default=DEFAULT_COLLECTION, help="Chroma collection name.")
+    parser.add_argument("--chunks", default=DEFAULT_CHUNKS, help="Path to chunks JSONL.")
+    parser.add_argument(
+        "--mode",
+        choices=["vector", "bm25", "hybrid"],
+        default=DEFAULT_MODE,
+        help="Retrieval mode.",
+    )
+    parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K, help="Top results.")
+    parser.add_argument(
+        "--candidate-k",
+        type=int,
+        default=DEFAULT_CANDIDATE_K,
+        help="Candidate count per retriever before hybrid fusion.",
+    )
+    parser.add_argument("--rrf-k", type=int, default=DEFAULT_RRF_K, help="RRF k value.")
+    parser.add_argument(
+        "--embedding-model",
+        default=DEFAULT_EMBEDDING_MODEL,
+        help="Embedding model used for vector retrieval.",
+    )
+    parser.add_argument("--model", default=DEFAULT_MODEL, help="Model name.")
+    parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help="OpenAI-compatible base URL.")
+    parser.add_argument("--api-key-env", default=DEFAULT_API_KEY_ENV, help="API key env var name.")
+    parser.add_argument("--temperature", type=float, default=0.0, help="Model temperature.")
+    parser.add_argument("--max-tokens", type=int, default=512, help="Max output tokens.")
+    parser.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=DEFAULT_TIMEOUT_SECONDS,
+        help="HTTP timeout in seconds.",
+    )
+    parser.add_argument("--dry-run", action="store_true", help="Do not call model endpoint.")
+    parser.add_argument("--show-context", action="store_true", help="Print full retrieved context.")
+    args = parser.parse_args()
+
+    db_path = Path(args.db)
+    if args.mode in {"vector", "hybrid"} and not db_path.is_dir():
+        print(f"ERROR: Chroma directory not found: {db_path}")
+        print("Run scripts/embed_chunks.py first.")
         return 1
 
-    print("\nAnswer:")
+    chunks: list[dict[str, Any]] = []
+    bm25 = None
+    if args.mode in {"bm25", "hybrid"}:
+        chunks_path = Path(args.chunks)
+        if not chunks_path.exists():
+            print(f"ERROR: chunks file not found: {chunks_path}")
+            return 1
+        chunks = load_chunks(chunks_path)
+        bm25 = BM25Okapi([tokenize(str(chunk.get("text", ""))) for chunk in chunks])
+
+    collection = None
+    model = None
+    if args.mode in {"vector", "hybrid"}:
+        print(f"Loading embedding model: {args.embedding_model}")
+        model = SentenceTransformer(args.embedding_model)
+        client = chromadb.PersistentClient(
+            path=str(db_path),
+            settings=Settings(anonymized_telemetry=False),
+        )
+        try:
+            collection = client.get_collection(name=args.collection)
+        except Exception as exc:
+            print(f"ERROR: Could not open Chroma collection '{args.collection}': {exc}")
+            return 1
+
+    if args.mode == "vector":
+        if collection is None or model is None:
+            print("ERROR: Vector mode requires Chroma collection and embedding model.")
+            return 1
+        rows = vector_search(collection=collection, model=model, query=args.question, top_k=args.top_k)
+    elif args.mode == "bm25":
+        if bm25 is None:
+            print("ERROR: BM25 mode requires chunks index.")
+            return 1
+        rows = bm25_search(bm25=bm25, chunks=chunks, query=args.question, top_k=args.top_k)
+    else:
+        if collection is None or model is None or bm25 is None:
+            print("ERROR: Hybrid mode requires both vector and BM25 retrieval.")
+            return 1
+        vector_rows = vector_search(
+            collection=collection,
+            model=model,
+            query=args.question,
+            top_k=args.candidate_k,
+        )
+        bm25_rows = bm25_search(
+            bm25=bm25,
+            chunks=chunks,
+            query=args.question,
+            top_k=args.candidate_k,
+        )
+        rows = rrf_fuse(vector_rows, bm25_rows, args.top_k, args.rrf_k)
+
+    context, source_lines = build_context_and_sources(rows)
+    user_prompt = build_user_prompt(args.question, context)
+
+    print("Question:")
+    print(args.question)
+    print()
+    print("Retrieval:")
+    print(f"mode: {args.mode}")
+    print(f"top_k: {args.top_k}")
+    if args.mode == "hybrid":
+        print(f"candidate_k: {args.candidate_k}")
+        print(f"rrf_k: {args.rrf_k}")
+    print()
+    print("Sources:")
+    for line in source_lines:
+        print(line)
+
+    if args.show_context:
+        print()
+        print("Context:")
+        print(context)
+
+    if args.dry_run:
+        print()
+        print("DRY RUN - no model call performed")
+        print()
+        print("Prompt:")
+        print("SYSTEM:")
+        print(SYSTEM_PROMPT)
+        print()
+        print("USER:")
+        print(user_prompt)
+        return 0
+
+    api_key = os.getenv(args.api_key_env, "").strip()
+    if not api_key:
+        print(f"ERROR: Missing API key. Set environment variable: {args.api_key_env}")
+        print("Tip: use --dry-run to test retrieval and prompt without model call.")
+        return 1
+
+    try:
+        answer = call_openai_compatible(
+            base_url=args.base_url,
+            model=args.model,
+            api_key=api_key,
+            user_prompt=user_prompt,
+            temperature=args.temperature,
+            max_tokens=args.max_tokens,
+            timeout_seconds=args.timeout_seconds,
+        )
+    except RuntimeError as exc:
+        print(f"ERROR: {exc}")
+        return 1
+
+    print()
+    print("Answer:")
     print(answer)
     return 0
 
