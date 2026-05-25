@@ -123,12 +123,16 @@ def main() -> None:
     )
     parser.add_argument(
         "--chunk-size",
+        "--chunk-tokens",
+        dest="chunk_size",
         type=int,
         default=DEFAULT_CHUNK_SIZE,
         help=f"Chunk size in tokens. Default: {DEFAULT_CHUNK_SIZE}",
     )
     parser.add_argument(
         "--overlap",
+        "--overlap-tokens",
+        dest="overlap",
         type=int,
         default=DEFAULT_OVERLAP,
         help=f"Overlap in tokens. Default: {DEFAULT_OVERLAP}",

@@ -63,8 +63,22 @@ def main() -> int:
     parser.add_argument("--chunks", type=Path, default=DEFAULT_CHUNKS, help="Chunks JSONL path.")
     parser.add_argument("--db", type=Path, default=DEFAULT_DB, help="Persistent ChromaDB directory.")
     parser.add_argument("--collection", default=DEFAULT_COLLECTION, help="Chroma collection name.")
-    parser.add_argument("--chunk-size", type=int, default=DEFAULT_CHUNK_SIZE, help="Chunk size in tokens.")
-    parser.add_argument("--overlap", type=int, default=DEFAULT_OVERLAP, help="Chunk overlap in tokens.")
+    parser.add_argument(
+        "--chunk-size",
+        "--chunk-tokens",
+        dest="chunk_size",
+        type=int,
+        default=DEFAULT_CHUNK_SIZE,
+        help="Chunk size in tokens.",
+    )
+    parser.add_argument(
+        "--overlap",
+        "--overlap-tokens",
+        dest="overlap",
+        type=int,
+        default=DEFAULT_OVERLAP,
+        help="Chunk overlap in tokens.",
+    )
     parser.add_argument("--embedding-model", default=DEFAULT_MODEL, help="SentenceTransformer model name.")
     parser.add_argument("--batch-size", type=int, default=32, help="Embedding batch size.")
     parser.add_argument(
