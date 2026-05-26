@@ -1,52 +1,25 @@
-## Next Step: First Grounded RAG Answer Slice
+## Active TODO (Post-P2 / Current P3 Cleanup)
 
-The retrieval evaluation is now strong enough to start testing grounded answer generation.
+1. Align docs with current canonical table-aware path:
+   - ensure all "how-to" examples point to `scripts/build_table_aware_chunks.py`
+   - keep memory-map-specific builder only as historical note, not active instruction
 
-### Proposed next steps
+2. Finalize roadmap/document tails:
+   - update `planning/RAG_ROADMAP_TO_SPACESHIP.md` "Recommended Next Concrete Step"
+   - keep phase status consistent with implemented experiments
 
-0. cleanup docs/ folder
-	- .MD files shall be moved to more appropriate location
+3. Resolve old memory-map builder status:
+   - option A: mark `scripts/build_memory_map_table_chunks.py` as superseded
+   - option B: remove it in a dedicated cleanup commit once reproducibility baseline is confirmed
 
-1. Create or improve `ask_chunks.py`.
+4. Hygiene cleanup after merge:
+   - normalize endlines/whitespace in imported eval artifacts (done for current CRLF set)
+   - keep future eval outputs LF-only
 
-2. Use hybrid retrieval as the default context source.
+5. Keep regression gate strict for retrieval changes:
+   - evaluate against `boot_bmhd`, `dma_cache`, `interrupt_routing`, `memory_map`
+   - compare at least `hit@1`, `hit@3`, `hit@5` before/after each change
 
-3. Pass the top 3 or top 5 retrieved chunks to the local LLM.
-
-4. Test answers using questions from the existing eval sets:
-   - Boot/BMHD
-   - DMA/cache
-   - Interrupt routing
-
-5. Require answers to include citations.
-
-6. Require the model to say “I don’t know” or “The provided context is not sufficient” when the retrieved context does not support an answer.
-
-7. Compare answer quality against retrieval results:
-   - Did the correct chunk appear in top 3/top 5?
-   - Did the model use the correct source?
-   - Did the model hallucinate?
-   - Were citations correct?
-   - Was the answer useful for a technical user?
-
-8. Keep retrieval eval as the regression gate before trusting answer generation.
-
-9. Model selection note for later:
-
-| Step | GPT-5.5? | Note |
-|---|---|---|
-| Find relevant pages | No | Keyword/PDF search |
-| Select page range | Optional | Human decides |
-| Extract pages | No | Local script |
-| Chunking | No | Local script |
-| Embedding/index | No | Local embedding |
-| Write 10 questions | Yes, optional | Useful for drafting |
-| Verify expected_pages | Not as authority | Human must confirm |
-| Run eval | No | Local |
-| Debug failures | Optional | Can help interpret results |
-| Correct eval targets | Optional | Human confirms |
-| Baseline report | Optional | Text only, not metrics |
-| README update | Optional | Wording |
-| Commit/push | No | Git workflow |
-
+6. Next implementation slice after cleanup:
+   - small generalization pass for table-aware flow (without changing default ingest path)
 
