@@ -277,6 +277,11 @@ Conservative sequence, each slice independently shippable:
   `table_row_group` chunks; >60% of pages routed to `table_row_group`). Generic
   mode keeps its JSON summary. See
   `docs/experiments/MIXED_INGEST_REPORTING_EXPERIMENT.md`.
+- **P3-20B** (done) — added lightweight pytest coverage for mixed-ingest
+  invariants before P3-21/P3-22: generic chunk schema compatibility, mixed
+  report summaries, guardrail warnings, and CLI exposure of `--chunk-mode`.
+  Test-only; no production pipeline behavior changes. See
+  `docs/experiments/MIXED_INGEST_INVARIANT_TESTS.md`.
 - **P3-21** — add `--keep-intermediate-artifacts`; default to writing the chunk
   JSONL only and cleaning raw/candidate intermediates.
 - **P3-22** — design and implement automatic retrieval-mode selection using the
