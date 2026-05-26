@@ -11,6 +11,8 @@ on that corpus. The path works, but it is still manual and explicit. The questio
 is how to expose it as a single ingest mode without disturbing the proven generic
 pipeline.
 
+Checkpoint summary: `docs/PHASE3_INTEGRATION_CHECKPOINT.md`.
+
 ## 1. Current state
 
 ### Normal ingest (proven, default)
