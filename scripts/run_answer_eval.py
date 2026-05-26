@@ -22,8 +22,10 @@ from ask_chunks import (
     DEFAULT_MODE,
     DEFAULT_MODEL,
     DEFAULT_RRF_K,
+    DEFAULT_TABLE_BOOST,
     DEFAULT_TOKEN_PARAM,
     DEFAULT_TOP_K,
+    bm25_table_boost_search,
     build_context_and_sources,
     build_run_record,
     build_source_records,
@@ -58,13 +60,19 @@ def main() -> int:
     parser.add_argument("--chunks", default=DEFAULT_CHUNKS, help="Path to chunks JSONL.")
     parser.add_argument(
         "--mode",
-        choices=["vector", "bm25", "hybrid"],
+        choices=["vector", "bm25", "hybrid", "bm25_table_boost"],
         default=DEFAULT_MODE,
         help="Retrieval mode.",
     )
     parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K, help="Top results.")
     parser.add_argument("--candidate-k", type=int, default=DEFAULT_CANDIDATE_K, help="Hybrid candidate count.")
     parser.add_argument("--rrf-k", type=int, default=DEFAULT_RRF_K, help="RRF k value.")
+    parser.add_argument(
+        "--table-boost",
+        type=float,
+        default=DEFAULT_TABLE_BOOST,
+        help="BM25 score multiplier for table_row_group chunks in bm25_table_boost mode.",
+    )
     parser.add_argument("--embedding-model", default=DEFAULT_EMBEDDING_MODEL, help="Embedding model.")
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Answer model.")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help="OpenAI-compatible base URL.")
@@ -120,7 +128,7 @@ def main() -> int:
 
     chunks: list[dict[str, Any]] = []
     bm25 = None
-    if args.mode in {"bm25", "hybrid"}:
+    if args.mode in {"bm25", "hybrid", "bm25_table_boost"}:
         chunks = load_chunks(Path(args.chunks))
         bm25 = BM25Okapi([tokenize(str(chunk.get("text", ""))) for chunk in chunks])
 
@@ -160,6 +168,17 @@ def main() -> int:
                 print("ERROR: BM25 mode requires chunks index.")
                 return 1
             retrieved = bm25_search(bm25=bm25, chunks=chunks, query=question, top_k=args.top_k)
+        elif args.mode == "bm25_table_boost":
+            if bm25 is None:
+                print("ERROR: bm25_table_boost mode requires chunks index.")
+                return 1
+            retrieved, _table_like_query = bm25_table_boost_search(
+                bm25=bm25,
+                chunks=chunks,
+                query=question,
+                top_k=args.top_k,
+                boost=args.table_boost,
+            )
         else:
             if collection is None or embedding_model is None or bm25 is None:
                 print("ERROR: Hybrid mode requires vector and BM25 retrieval.")

@@ -28,6 +28,7 @@ DEFAULT_BASE_URL = "https://api.openai.com/v1"
 DEFAULT_API_KEY_ENV = "OPENAI_API_KEY"
 DEFAULT_TIMEOUT_SECONDS = 60
 DEFAULT_TOKEN_PARAM = "max_completion_tokens"
+DEFAULT_TABLE_BOOST = 1.15
 
 SYSTEM_PROMPT = """You are a technical documentation assistant.
 Answer only using the provided context.
@@ -66,6 +67,34 @@ def safe_metadata(chunk: dict[str, Any]) -> dict[str, Any]:
 
 def tokenize(text: str) -> list[str]:
     return re.findall(r"[a-z0-9_]+", text.lower())
+
+
+TABLE_LIKE_TERMS = [
+    "address range",
+    "size",
+    "segment",
+    "cpu0",
+    "cpu1",
+    "cpu2",
+    "cpu3",
+    "dspr",
+    "pspr",
+    "dlmu",
+    "lmuram",
+    "boot rom",
+    "program flash",
+    "data flash",
+    "pflash",
+    "eeprom",
+    "ucb",
+    "cfs",
+    "sota",
+]
+
+
+def is_table_like_query(query: str) -> bool:
+    low = query.lower()
+    return any(term in low for term in TABLE_LIKE_TERMS)
 
 
 def vector_search(
@@ -128,6 +157,48 @@ def bm25_search(
             }
         )
     return rows
+
+
+def bm25_table_boost_search(
+    *,
+    bm25: BM25Okapi,
+    chunks: list[dict[str, Any]],
+    query: str,
+    top_k: int,
+    boost: float,
+) -> tuple[list[dict[str, Any]], bool]:
+    scores = bm25.get_scores(tokenize(query))
+    table_like = is_table_like_query(query)
+
+    adjusted_scores: list[float] = []
+    for index, score in enumerate(scores):
+        adjusted = float(score)
+        if table_like and str(chunks[index].get("chunk_type", "")) == "table_row_group":
+            adjusted *= boost
+        adjusted_scores.append(adjusted)
+
+    ranked_indices = sorted(
+        range(len(adjusted_scores)),
+        key=lambda i: adjusted_scores[i],
+        reverse=True,
+    )[:top_k]
+
+    rows: list[dict[str, Any]] = []
+    for rank, index in enumerate(ranked_indices, start=1):
+        chunk = chunks[index]
+        rows.append(
+            {
+                "key": int(chunk.get("chunk_index", index)),
+                "meta": safe_metadata(chunk),
+                "distance": -float(adjusted_scores[index]),
+                "bm25_score": float(scores[index]),
+                "boosted_score": float(adjusted_scores[index]),
+                "chunk_type": str(chunk.get("chunk_type", "")),
+                "document": str(chunk.get("text", "")),
+                "bm25_rank": rank,
+            }
+        )
+    return rows, table_like
 
 
 def rrf_fuse(
@@ -202,6 +273,8 @@ def build_source_records(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "bm25_rank": row.get("bm25_rank"),
                 "hybrid_rank": row.get("hybrid_rank"),
                 "bm25_score": row.get("bm25_score"),
+                "boosted_score": row.get("boosted_score"),
+                "chunk_type": row.get("chunk_type"),
             }
         )
     return records
@@ -322,7 +395,7 @@ def main() -> int:
     parser.add_argument("--chunks", default=DEFAULT_CHUNKS, help="Path to chunks JSONL.")
     parser.add_argument(
         "--mode",
-        choices=["vector", "bm25", "hybrid"],
+        choices=["vector", "bm25", "hybrid", "bm25_table_boost"],
         default=DEFAULT_MODE,
         help="Retrieval mode.",
     )
@@ -334,6 +407,12 @@ def main() -> int:
         help="Candidate count per retriever before hybrid fusion.",
     )
     parser.add_argument("--rrf-k", type=int, default=DEFAULT_RRF_K, help="RRF k value.")
+    parser.add_argument(
+        "--table-boost",
+        type=float,
+        default=DEFAULT_TABLE_BOOST,
+        help="BM25 score multiplier for table_row_group chunks in bm25_table_boost mode.",
+    )
     parser.add_argument(
         "--embedding-model",
         default=DEFAULT_EMBEDDING_MODEL,
@@ -377,7 +456,7 @@ def main() -> int:
 
     chunks: list[dict[str, Any]] = []
     bm25 = None
-    if args.mode in {"bm25", "hybrid"}:
+    if args.mode in {"bm25", "hybrid", "bm25_table_boost"}:
         chunks_path = Path(args.chunks)
         if not chunks_path.exists():
             print(f"ERROR: chunks file not found: {chunks_path}")
@@ -410,6 +489,17 @@ def main() -> int:
             print("ERROR: BM25 mode requires chunks index.")
             return 1
         rows = bm25_search(bm25=bm25, chunks=chunks, query=args.question, top_k=args.top_k)
+    elif args.mode == "bm25_table_boost":
+        if bm25 is None:
+            print("ERROR: bm25_table_boost mode requires chunks index.")
+            return 1
+        rows, table_like_query = bm25_table_boost_search(
+            bm25=bm25,
+            chunks=chunks,
+            query=args.question,
+            top_k=args.top_k,
+            boost=args.table_boost,
+        )
     else:
         if collection is None or model is None or bm25 is None:
             print("ERROR: Hybrid mode requires both vector and BM25 retrieval.")
@@ -441,6 +531,9 @@ def main() -> int:
     if args.mode == "hybrid":
         print(f"candidate_k: {args.candidate_k}")
         print(f"rrf_k: {args.rrf_k}")
+    if args.mode == "bm25_table_boost":
+        print(f"table_boost: {args.table_boost}")
+        print(f"table_like_query: {table_like_query}")
     print()
     print("Sources:")
     for line in source_lines:
