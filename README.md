@@ -13,7 +13,10 @@ No UI, Docker, OCR, reranker, or production platform yet.
 ## Structure
 
 ```text
-docs/        original PDF files, ignored by git
+docs/             source PDFs (ignored by git) and project Markdown docs
+  project/        workflow, phase summaries, checkpoints
+  experiments/    experiment reports, smoke tests, diagnostics
+  design/         design decisions and interface specs
 data/        generated JSONL outputs, ignored by git
 scripts/     CLI scripts
 eval/        future evaluation questions

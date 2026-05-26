@@ -45,7 +45,7 @@ this slice it matches BM25 exactly at top 5. That is an improvement over current
 hybrid, but it does not improve beyond BM25.
 
 Follow-up chunk-size results are documented in
-`docs/MEMORY_MAP_CHUNK_SIZE_EXPERIMENT.md`. The best tested setting for this slice was
+`docs/experiments/MEMORY_MAP_CHUNK_SIZE_EXPERIMENT.md`. The best tested setting for this slice was
 300 token chunks with 60 token overlap, reaching 80% hit@5 for BM25 and
 `bm25_first_hybrid`.
 
