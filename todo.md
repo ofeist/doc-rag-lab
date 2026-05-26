@@ -4,6 +4,9 @@ The retrieval evaluation is now strong enough to start testing grounded answer g
 
 ### Proposed next steps
 
+0. cleanup docs/ folder
+	- .MD files shall be moved to more appropriate location
+
 1. Create or improve `ask_chunks.py`.
 
 2. Use hybrid retrieval as the default context source.
