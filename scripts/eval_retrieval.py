@@ -11,6 +11,13 @@ from chromadb.config import Settings
 from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
 
+from retrieval_mode import (
+    auto_selection_reason,
+    corpus_has_table_row_groups,
+    is_table_like_query,
+    resolve_retrieval_mode,
+)
+
 
 DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
 DEFAULT_RRF_K = 60
@@ -147,19 +154,6 @@ def bm25_search(
     return rows
 
 
-# Experimental (P3-3, bm25_table_boost mode). Local to this experiment.
-TABLE_LIKE_TERMS = [
-    "address range", "size", "segment", "cpu0", "cpu1", "cpu2", "cpu3",
-    "dspr", "pspr", "dlmu", "lmuram", "boot rom", "program flash",
-    "data flash", "pflash", "eeprom", "ucb", "cfs", "sota",
-]
-
-
-def is_table_like_query(query: str) -> bool:
-    low = query.lower()
-    return any(term in low for term in TABLE_LIKE_TERMS)
-
-
 def bm25_table_boost_search(
     *,
     bm25: BM25Okapi,
@@ -281,7 +275,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--mode",
-        choices=["vector", "bm25", "hybrid", "bm25_first_hybrid", "bm25_table_boost"],
+        choices=["vector", "bm25", "hybrid", "bm25_first_hybrid", "bm25_table_boost", "auto"],
         default="vector",
         help="Retrieval mode to evaluate.",
     )
@@ -325,10 +319,16 @@ def main() -> int:
     args = parser.parse_args()
 
     questions = load_questions(Path(args.eval))
+    chunks_path = Path(args.chunks)
+    auto_has_table_row_groups = False
+    if args.mode == "auto":
+        if not chunks_path.exists():
+            raise FileNotFoundError(f"Chunks file not found: {chunks_path}")
+        auto_has_table_row_groups = corpus_has_table_row_groups(chunks_path)
 
     collection = None
     model = None
-    if args.mode in {"vector", "hybrid", "bm25_first_hybrid"}:
+    if args.mode in {"vector", "hybrid", "bm25_first_hybrid", "auto"}:
         db_path = Path(args.db)
         if not db_path.exists():
             raise FileNotFoundError(f"Chroma DB not found: {db_path}. Run embed_chunks.py first.")
@@ -344,8 +344,8 @@ def main() -> int:
 
     chunks: list[dict[str, Any]] = []
     bm25 = None
-    if args.mode in {"bm25", "hybrid", "bm25_first_hybrid", "bm25_table_boost"}:
-        chunks = load_chunks(Path(args.chunks))
+    if args.mode in {"bm25", "hybrid", "bm25_first_hybrid", "bm25_table_boost", "auto"}:
+        chunks = load_chunks(chunks_path)
         bm25 = BM25Okapi([tokenize(str(chunk.get("text", ""))) for chunk in chunks])
 
     hit_at_1 = 0
@@ -356,6 +356,8 @@ def main() -> int:
     print(f"Eval file: {args.eval}")
     print(f"Questions: {len(questions)}")
     print(f"Mode: {args.mode}")
+    if args.mode == "auto":
+        print(f"Auto corpus has table_row_group: {auto_has_table_row_groups}")
     print(f"Top-k: {args.top_k}")
     if args.mode in {"hybrid", "bm25_first_hybrid"}:
         print(f"Candidate-k: {args.candidate_k}")
@@ -368,8 +370,9 @@ def main() -> int:
     for item in questions:
         expected_pages = {int(page) for page in item["expected_pages"]}
         include_documents = args.debug_failures
+        effective_mode = resolve_retrieval_mode(args.mode, item["question"], chunks_path)
 
-        if args.mode == "vector":
+        if effective_mode == "vector":
             if collection is None or model is None:
                 raise RuntimeError("Vector mode requires an initialized Chroma collection and embedding model.")
             rows = vector_search(
@@ -379,7 +382,7 @@ def main() -> int:
                 top_k=args.top_k,
                 include_documents=include_documents,
             )
-        elif args.mode == "bm25":
+        elif effective_mode == "bm25":
             if bm25 is None:
                 raise RuntimeError("BM25 mode requires an initialized BM25 index.")
             rows = bm25_search(
@@ -389,7 +392,7 @@ def main() -> int:
                 top_k=args.top_k,
                 include_documents=include_documents,
             )
-        elif args.mode == "bm25_table_boost":
+        elif effective_mode == "bm25_table_boost":
             if bm25 is None:
                 raise RuntimeError("bm25_table_boost mode requires an initialized BM25 index.")
             rows, query_table_like = bm25_table_boost_search(
@@ -417,7 +420,7 @@ def main() -> int:
                 top_k=args.candidate_k,
                 include_documents=include_documents,
             )
-            if args.mode == "hybrid":
+            if effective_mode == "hybrid":
                 rows = rrf_fuse(vector_rows, bm25_rows, args.top_k, args.rrf_k)
             else:
                 rows = bm25_first_fuse(vector_rows, bm25_rows, args.top_k)
@@ -440,9 +443,12 @@ def main() -> int:
         print(f"{item['id']} {status}")
         print(f"  question: {item['question']}")
         print(f"  expected: {sorted(expected_pages)}")
+        if args.mode == "auto":
+            print(f"  effective_mode: {effective_mode}")
+            print(f"  auto_reason: {auto_selection_reason(item['question'], auto_has_table_row_groups)}")
         print(f"  top_pages: {top_pages}")
         print(f"  top_distances: {distance_text}")
-        if args.mode == "bm25_table_boost":
+        if effective_mode == "bm25_table_boost":
             print(f"  table_like_query: {query_table_like}")
         if item.get("notes"):
             print(f"  notes: {item['notes']}")

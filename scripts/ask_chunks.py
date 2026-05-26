@@ -14,6 +14,13 @@ from chromadb.config import Settings
 from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
 
+from retrieval_mode import (
+    auto_selection_reason,
+    corpus_has_table_row_groups,
+    is_table_like_query,
+    resolve_retrieval_mode,
+)
+
 
 DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 DEFAULT_DB = "vector_db/chroma"
@@ -67,34 +74,6 @@ def safe_metadata(chunk: dict[str, Any]) -> dict[str, Any]:
 
 def tokenize(text: str) -> list[str]:
     return re.findall(r"[a-z0-9_]+", text.lower())
-
-
-TABLE_LIKE_TERMS = [
-    "address range",
-    "size",
-    "segment",
-    "cpu0",
-    "cpu1",
-    "cpu2",
-    "cpu3",
-    "dspr",
-    "pspr",
-    "dlmu",
-    "lmuram",
-    "boot rom",
-    "program flash",
-    "data flash",
-    "pflash",
-    "eeprom",
-    "ucb",
-    "cfs",
-    "sota",
-]
-
-
-def is_table_like_query(query: str) -> bool:
-    low = query.lower()
-    return any(term in low for term in TABLE_LIKE_TERMS)
 
 
 def vector_search(
@@ -302,6 +281,8 @@ def build_run_record(
     answer: str | None,
     dry_run: bool,
     token_param: str,
+    requested_mode: str | None = None,
+    effective_mode: str | None = None,
 ) -> dict[str, Any]:
     return {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -309,6 +290,8 @@ def build_run_record(
         "model": model,
         "base_url": base_url,
         "mode": mode,
+        "requested_mode": requested_mode or mode,
+        "effective_mode": effective_mode or mode,
         "top_k": top_k,
         "candidate_k": candidate_k,
         "rrf_k": rrf_k,
@@ -395,7 +378,7 @@ def main() -> int:
     parser.add_argument("--chunks", default=DEFAULT_CHUNKS, help="Path to chunks JSONL.")
     parser.add_argument(
         "--mode",
-        choices=["vector", "bm25", "hybrid", "bm25_table_boost"],
+        choices=["vector", "bm25", "hybrid", "bm25_table_boost", "auto"],
         default=DEFAULT_MODE,
         help="Retrieval mode.",
     )
@@ -449,15 +432,24 @@ def main() -> int:
     args = parser.parse_args()
 
     db_path = Path(args.db)
-    if args.mode in {"vector", "hybrid"} and not db_path.is_dir():
+    chunks_path = Path(args.chunks)
+    auto_has_table_row_groups = False
+    effective_mode = args.mode
+    if args.mode == "auto":
+        if not chunks_path.exists():
+            print(f"ERROR: chunks file not found: {chunks_path}")
+            return 1
+        auto_has_table_row_groups = corpus_has_table_row_groups(chunks_path)
+        effective_mode = resolve_retrieval_mode(args.mode, args.question, chunks_path)
+
+    if effective_mode in {"vector", "hybrid"} and not db_path.is_dir():
         print(f"ERROR: Chroma directory not found: {db_path}")
         print("Run scripts/embed_chunks.py first.")
         return 1
 
     chunks: list[dict[str, Any]] = []
     bm25 = None
-    if args.mode in {"bm25", "hybrid", "bm25_table_boost"}:
-        chunks_path = Path(args.chunks)
+    if effective_mode in {"bm25", "hybrid", "bm25_table_boost"}:
         if not chunks_path.exists():
             print(f"ERROR: chunks file not found: {chunks_path}")
             return 1
@@ -466,7 +458,7 @@ def main() -> int:
 
     collection = None
     model = None
-    if args.mode in {"vector", "hybrid"}:
+    if effective_mode in {"vector", "hybrid"}:
         print(f"Loading embedding model: {args.embedding_model}")
         model = SentenceTransformer(args.embedding_model)
         client = chromadb.PersistentClient(
@@ -479,17 +471,17 @@ def main() -> int:
             print(f"ERROR: Could not open Chroma collection '{args.collection}': {exc}")
             return 1
 
-    if args.mode == "vector":
+    if effective_mode == "vector":
         if collection is None or model is None:
             print("ERROR: Vector mode requires Chroma collection and embedding model.")
             return 1
         rows = vector_search(collection=collection, model=model, query=args.question, top_k=args.top_k)
-    elif args.mode == "bm25":
+    elif effective_mode == "bm25":
         if bm25 is None:
             print("ERROR: BM25 mode requires chunks index.")
             return 1
         rows = bm25_search(bm25=bm25, chunks=chunks, query=args.question, top_k=args.top_k)
-    elif args.mode == "bm25_table_boost":
+    elif effective_mode == "bm25_table_boost":
         if bm25 is None:
             print("ERROR: bm25_table_boost mode requires chunks index.")
             return 1
@@ -527,11 +519,14 @@ def main() -> int:
     print()
     print("Retrieval:")
     print(f"mode: {args.mode}")
+    if args.mode == "auto":
+        print(f"effective_mode: {effective_mode}")
+        print(f"auto_reason: {auto_selection_reason(args.question, auto_has_table_row_groups)}")
     print(f"top_k: {args.top_k}")
-    if args.mode == "hybrid":
+    if effective_mode == "hybrid":
         print(f"candidate_k: {args.candidate_k}")
         print(f"rrf_k: {args.rrf_k}")
-    if args.mode == "bm25_table_boost":
+    if effective_mode == "bm25_table_boost":
         print(f"table_boost: {args.table_boost}")
         print(f"table_like_query: {table_like_query}")
     print()
@@ -572,6 +567,8 @@ def main() -> int:
                     answer=None,
                     dry_run=True,
                     token_param=args.token_param,
+                    requested_mode=args.mode,
+                    effective_mode=effective_mode,
                 ),
             )
             print()
@@ -621,6 +618,8 @@ def main() -> int:
                 answer=answer,
                 dry_run=False,
                 token_param=args.token_param,
+                requested_mode=args.mode,
+                effective_mode=effective_mode,
             ),
         )
         print()

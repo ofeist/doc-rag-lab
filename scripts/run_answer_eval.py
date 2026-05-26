@@ -38,6 +38,11 @@ from ask_chunks import (
     vector_search,
     write_jsonl_record,
 )
+from retrieval_mode import (
+    auto_selection_reason,
+    corpus_has_table_row_groups,
+    resolve_retrieval_mode,
+)
 
 
 def load_eval_questions(path: Path) -> list[dict[str, Any]]:
@@ -60,7 +65,7 @@ def main() -> int:
     parser.add_argument("--chunks", default=DEFAULT_CHUNKS, help="Path to chunks JSONL.")
     parser.add_argument(
         "--mode",
-        choices=["vector", "bm25", "hybrid", "bm25_table_boost"],
+        choices=["vector", "bm25", "hybrid", "bm25_table_boost", "auto"],
         default=DEFAULT_MODE,
         help="Retrieval mode.",
     )
@@ -114,7 +119,15 @@ def main() -> int:
             print("Use --overwrite to replace it, or --append to add records to the existing file.")
             return 1
 
-    if args.mode in {"vector", "hybrid"} and not Path(args.db).is_dir():
+    chunks_path = Path(args.chunks)
+    auto_has_table_row_groups = False
+    if args.mode == "auto":
+        if not chunks_path.exists():
+            print(f"ERROR: chunks file not found: {chunks_path}")
+            return 1
+        auto_has_table_row_groups = corpus_has_table_row_groups(chunks_path)
+
+    if args.mode in {"vector", "hybrid", "auto"} and not Path(args.db).is_dir():
         print(f"ERROR: Chroma directory not found: {args.db}")
         return 1
 
@@ -128,13 +141,13 @@ def main() -> int:
 
     chunks: list[dict[str, Any]] = []
     bm25 = None
-    if args.mode in {"bm25", "hybrid", "bm25_table_boost"}:
-        chunks = load_chunks(Path(args.chunks))
+    if args.mode in {"bm25", "hybrid", "bm25_table_boost", "auto"}:
+        chunks = load_chunks(chunks_path)
         bm25 = BM25Okapi([tokenize(str(chunk.get("text", ""))) for chunk in chunks])
 
     collection = None
     embedding_model = None
-    if args.mode in {"vector", "hybrid"}:
+    if args.mode in {"vector", "hybrid", "auto"}:
         print(f"Loading embedding model: {args.embedding_model}")
         embedding_model = SentenceTransformer(args.embedding_model)
         client = chromadb.PersistentClient(
@@ -146,14 +159,20 @@ def main() -> int:
     print(f"Eval file: {args.eval}")
     print(f"Questions: {len(questions)}")
     print(f"Mode: {args.mode}")
+    if args.mode == "auto":
+        print(f"Auto corpus has table_row_group: {auto_has_table_row_groups}")
     print(f"Output: {args.output_jsonl}")
     print()
 
     for index, item in enumerate(questions, start=1):
         question = str(item["question"])
         print(f"[{index}/{len(questions)}] {item.get('id', 'question')}: {question}")
+        effective_mode = resolve_retrieval_mode(args.mode, question, chunks_path)
+        if args.mode == "auto":
+            print(f"  effective_mode: {effective_mode}")
+            print(f"  auto_reason: {auto_selection_reason(question, auto_has_table_row_groups)}")
 
-        if args.mode == "vector":
+        if effective_mode == "vector":
             if collection is None or embedding_model is None:
                 print("ERROR: Vector mode requires Chroma collection and embedding model.")
                 return 1
@@ -163,12 +182,12 @@ def main() -> int:
                 query=question,
                 top_k=args.top_k,
             )
-        elif args.mode == "bm25":
+        elif effective_mode == "bm25":
             if bm25 is None:
                 print("ERROR: BM25 mode requires chunks index.")
                 return 1
             retrieved = bm25_search(bm25=bm25, chunks=chunks, query=question, top_k=args.top_k)
-        elif args.mode == "bm25_table_boost":
+        elif effective_mode == "bm25_table_boost":
             if bm25 is None:
                 print("ERROR: bm25_table_boost mode requires chunks index.")
                 return 1
@@ -233,6 +252,8 @@ def main() -> int:
                 answer=answer,
                 dry_run=args.dry_run,
                 token_param=args.token_param,
+                requested_mode=args.mode,
+                effective_mode=effective_mode,
             ),
         )
 

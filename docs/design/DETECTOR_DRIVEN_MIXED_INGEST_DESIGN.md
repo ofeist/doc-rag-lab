@@ -291,8 +291,11 @@ Conservative sequence, each slice independently shippable:
   `section_title`, `table_title`, `table_context`, and `row_count`.
   `column_headers` remains omitted because it is list-valued. See
   `docs/experiments/CHROMA_CHUNK_TYPE_METADATA_EXPERIMENT.md`.
-- **P3-22B** — design and implement automatic retrieval-mode selection using the
-  section-6 signals.
+- **P3-22B** (done) — added opt-in `--mode auto` to retrieval eval and answer
+  paths. Auto selects `bm25_table_boost` only when the query is table-like and
+  the chunks JSONL contains `table_row_group`; otherwise it uses `hybrid`.
+  Manual modes and defaults are unchanged. See
+  `docs/experiments/AUTO_RETRIEVAL_MODE_EXPERIMENT.md`.
 
 ## 9. Non-goals
 
