@@ -1,7 +1,7 @@
 # Phase 3 Shared-Corpus Checkpoint
 
 Short checkpoint after the detector-driven mixed chunking and shared-corpus smoke
-tests (P3-10 .. P3-13). It extends `docs/PHASE3_TABLE_RETRIEVAL_SUMMARY.md`, which
+tests (P3-10 .. P3-13). It extends `docs/project/PHASE3_TABLE_RETRIEVAL_SUMMARY.md`, which
 covered the table-retrieval foundations up to P3-9.
 
 ## Where we are now
