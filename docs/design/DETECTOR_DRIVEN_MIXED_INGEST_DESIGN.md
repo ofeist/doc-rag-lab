@@ -54,8 +54,9 @@ This works but has three rough edges that integration must address:
 
 - It is four manual commands with hand-managed intermediate file paths.
 - The mixed chunk schema is richer than the generic schema (see section 5).
-- `embed_chunks.safe_metadata()` persists only 7 fields to Chroma today and drops
-  `chunk_type` and all table fields (see sections 5 and 6).
+- `embed_chunks.safe_metadata()` now persists scalar chunk metadata to Chroma,
+  including `chunk_type` and core table fields needed by future retrieval logic
+  (see sections 5 and 6).
 
 ## 2. Desired ingest modes
 
@@ -187,12 +188,10 @@ during implementation, not now:**
    `chunk_type` or table fields, and `doc_id` is injected later by
    `ingest_document.add_doc_id()`. To make `generic` schema-compatible, generic
    chunks must also carry `chunk_type="generic_page"` and empty table fields.
-2. `embed_chunks.safe_metadata()` persists only `doc_id, source, page_start,
-   page_end, chunk_index, page_chunk_index, token_count` to Chroma. It drops
-   `chunk_type` and the table fields. Any retrieval feature that wants to filter
-   or boost by `chunk_type` from the vector store needs `chunk_type` (at least)
-   added to the persisted metadata. `column_headers` is a list and Chroma metadata
-   is scalar-only, so it would be stored as a joined string or omitted.
+2. `embed_chunks.safe_metadata()` persists `doc_id, source, page_start, page_end,
+   chunk_index, page_chunk_index, token_count, chunk_type, section_title,
+   table_title, table_context, row_count` to Chroma. `column_headers` remains
+   omitted because it is list-valued and Chroma metadata is scalar-only.
 
 These gaps do not block this design; they are why the migration plan sequences
 schema work before retrieval work.
@@ -216,8 +215,8 @@ Future direction (not implemented here):
 
 Signals already available for a future auto-selector:
 
-- corpus signal: presence of `chunk_type == table_row_group` chunks. From the
-  chunks JSONL this is direct; from Chroma it requires the section-5 metadata fix.
+- corpus signal: presence of `chunk_type == table_row_group` chunks. This is now
+  available both from chunks JSONL and from Chroma metadata.
 - query signal: the table-like keyword set already used by
   `bm25_table_boost_search` (address / table / register / hex / segment-like
   terms).
@@ -287,8 +286,13 @@ Conservative sequence, each slice independently shippable:
   intermediates only after successful embedding. The flag keeps all generated
   JSONL artifacts for debugging. See
   `docs/experiments/MIXED_INGEST_ARTIFACT_CLEANUP_EXPERIMENT.md`.
-- **P3-22** — design and implement automatic retrieval-mode selection using the
-  section-6 signals (requires section-5 gap 2: persist `chunk_type` to Chroma).
+- **P3-22A** (done) — `embed_chunks.safe_metadata()` now persists scalar chunk
+  metadata needed by future retrieval logic, including `chunk_type`,
+  `section_title`, `table_title`, `table_context`, and `row_count`.
+  `column_headers` remains omitted because it is list-valued. See
+  `docs/experiments/CHROMA_CHUNK_TYPE_METADATA_EXPERIMENT.md`.
+- **P3-22B** — design and implement automatic retrieval-mode selection using the
+  section-6 signals.
 
 ## 9. Non-goals
 

@@ -14,6 +14,21 @@ from tqdm import tqdm
 
 DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
 
+SAFE_METADATA_FIELDS = [
+    "doc_id",
+    "source",
+    "page_start",
+    "page_end",
+    "chunk_index",
+    "page_chunk_index",
+    "token_count",
+    "chunk_type",
+    "section_title",
+    "table_title",
+    "table_context",
+    "row_count",
+]
+
 
 def read_jsonl(path: Path) -> Iterator[dict]:
     with path.open("r", encoding="utf-8") as f:
@@ -27,8 +42,12 @@ def read_jsonl(path: Path) -> Iterator[dict]:
                 raise ValueError(f"Invalid JSON on line {line_number} in {path}") from exc
 
 
+def is_chroma_scalar(value: object) -> bool:
+    return value is None or isinstance(value, (str, int, float, bool))
+
+
 def safe_metadata(chunk: dict) -> dict:
-    return {
+    metadata = {
         "doc_id": str(chunk.get("doc_id", "")),
         "source": str(chunk.get("source", "")),
         "page_start": int(chunk.get("page_start", -1)),
@@ -37,6 +56,15 @@ def safe_metadata(chunk: dict) -> dict:
         "page_chunk_index": int(chunk.get("page_chunk_index", -1)),
         "token_count": int(chunk.get("token_count", -1)),
     }
+
+    for field in SAFE_METADATA_FIELDS:
+        if field in metadata or field not in chunk:
+            continue
+        value = chunk[field]
+        if is_chroma_scalar(value):
+            metadata[field] = value
+
+    return metadata
 
 
 def build_chunk_id(chunk: dict) -> str:
