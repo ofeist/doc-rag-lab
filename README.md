@@ -1,574 +1,259 @@
-# Aurix RAG PoC
+# Doc RAG Lab
 
-Minimal pragmatic RAG proof-of-concept for technical PDF documentation.
+Local RAG lab for technical PDF documentation. The pipeline extracts pages,
+chunks them, embeds into a local ChromaDB, evaluates retrieval quality, and can
+generate grounded answers via an OpenAI-compatible API.
 
-The first iteration is intentionally CLI-first:
+Phase 3 adds detector-driven mixed chunking for table-heavy manuals:
+non-table pages become `generic_page` chunks, while detected table-heavy pages
+produce `table_row_group` + `generic_residual` chunks.
 
-```text
-PDF -> raw_pages.jsonl -> chunks.jsonl -> ChromaDB -> search -> first RAG answer
-```
+## What Currently Works
 
-No UI, Docker, OCR, reranker, or production platform yet.
-
-## Structure
-
-```text
-docs/             source PDFs (ignored by git) and project Markdown docs
-  project/        workflow, phase summaries, checkpoints
-  experiments/    experiment reports, smoke tests, diagnostics
-  design/         design decisions and interface specs
-data/        generated JSONL outputs, ignored by git
-scripts/     CLI scripts
-eval/        future evaluation questions
-vector_db/   future local vector database, ignored by git
-```
+- Generic ingest: extract -> chunk -> embed
+- Mixed ingest: extract -> detect tables -> build mixed chunks -> embed
+- Retrieval eval: `scripts/eval_retrieval.py` including opt-in `--mode auto`
+- Grounded answers: `scripts/ask_chunks.py` and batch `scripts/run_answer_eval.py`
+- Persisted Chroma metadata includes `chunk_type` and table scalar fields
+- Mixed ingest artifact cleanup by default (`--keep-intermediate-artifacts` for debugging)
+- Pytest coverage (`17` tests passing in current baseline)
 
 ## Setup
 
-Recommended on Linux/macOS/Git Bash:
-
 ```bash
-./scripts/setup.sh
+python3 -m venv .venv
 source .venv/bin/activate
+pip install -r requirements-rag.txt
+pip install -r requirements-dev.txt
 ```
 
-Install the heavier Chroma/embedding dependencies later when you need search/RAG:
+Note: `requirements-dev.txt` includes `-r requirements-rag.txt`, so installing
+both is redundant. Use `requirements-dev.txt` when you want tests; use
+`requirements-rag.txt` when you only want the pipeline dependencies.
+
+## Input Document Location
+
+The current examples use:
+
+`docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf`
+
+Reference documentation landing page:
+`https://documentation.infineon.com/aurixtc3xx/docs/qmd1702366622648`
+
+During this PoC, `docs/` contains both project documentation and the local
+sample/vendor PDF used for testing. A future cleanup may move source PDFs to a
+separate directory such as `source_docs/`.
+
+Eval files under `eval/` are currently tuned for the AURIX manual. You can swap
+in another technical PDF, but expect to adjust the eval sets.
+
+## Generic Ingest (Focused Slice)
+
+Generic ingest is the default mode and is a good baseline for prose-heavy
+content (page-aware token-window chunking).
 
 ```bash
-./scripts/setup.sh --rag
-```
-
-Recommended on Windows PowerShell:
-
-```powershell
-.\scripts\setup.ps1
-.\.venv\Scripts\Activate.ps1
-```
-
-PowerShell with RAG dependencies:
-
-```powershell
-.\scripts\setup.ps1 -Rag
-```
-
-Manual setup:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-On Git Bash for Windows, activation may be:
-
-```bash
-source .venv/Scripts/activate
-```
-
-## Repeatable Document Ingest
-
-Use `scripts/ingest_document.py` to run the document ingest pipeline end to end:
-
-```bash
-python scripts/ingest_document.py \
+.venv/bin/python scripts/ingest_document.py \
   --pdf docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf \
-  --doc-id aurix_tc3xx_part1 \
+  --page-ranges 90-126 \
+  --doc-id aurix_generic_slice \
+  --collection technical_docs \
+  --chunk-mode generic \
+  --reset
+```
+
+If you already have a chunks JSONL and only want to embed it into Chroma:
+
+```bash
+.venv/bin/python scripts/embed_chunks.py \
+  --chunks data/chunks.jsonl \
+  --db vector_db/chroma \
   --collection technical_docs \
   --reset
 ```
 
-By default, omitted `--page-ranges` means full-document ingest.
+## Mixed Ingest (Shared Corpus)
 
-Use `--page-ranges` for focused eval/debug slices:
+Mixed ingest runs: extract -> detect table-heavy pages -> build mixed chunks -> embed.
 
 ```bash
-python scripts/ingest_document.py \
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+.venv/bin/python scripts/ingest_document.py \
   --pdf docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf \
-  --page-ranges 115-126 \
-  --doc-id boot_bmhd \
+  --page-ranges 90-126,257-259,307-314,1364-1397,1435-1455,1483-1488 \
+  --doc-id aurix_mixed_shared \
   --collection technical_docs \
+  --chunk-mode mixed \
+  --section-title "AURIX Mixed Shared Corpus" \
   --reset
 ```
 
-This replaces the manual sequence:
+Mixed chunk types:
 
 ```text
-extract_pages.py -> chunk_pages.py -> embed_chunks.py
+generic_page
+table_row_group
+generic_residual
 ```
 
-Default generated outputs:
+Artifacts (mixed mode):
 
-```text
-data/raw_pages.jsonl
-data/chunks.jsonl
-vector_db/chroma
-```
+- always keeps: `data/chunks_<doc_id>.jsonl`
+- by default cleans after successful embed:
+  - `data/raw_pages_<doc_id>.jsonl`
+  - `data/table_page_candidates_<doc_id>.jsonl`
+- `--keep-intermediate-artifacts` keeps intermediates for debugging
 
-`--doc-id` is written into raw page and chunk metadata so ingested documents and focused
-slices can later move to manifest-driven ingest and filtering.
-
-## Slice Manifest
-
-Known focused RAG eval/debug slices are recorded in:
-
-```text
-configs/slices.json
-```
-
-The manifest records:
-
-```text
-PDF path
-page ranges
-doc ID
-Chroma collection
-retrieval eval file
-answer batch output
-grading report
-default retrieval/model settings
-```
-
-For now the manifest is a curated eval/debug fixture registry, not the main ingest workflow.
-It is documentation/config only and is intended to support future helper scripts such as:
+## Full-Document Mixed Ingest Smoke
 
 ```bash
-python scripts/run_slice_eval.py --slice boot_bmhd --overwrite
-```
-
-Current manual workflow using the manifest values:
-
-```bash
-python scripts/ingest_document.py \
-  --pdf <pdf> \
-  --page-ranges <page_ranges> \
-  --doc-id <doc_id> \
-  --collection <collection> \
-  --reset
-```
-
-Validate the manifest:
-
-```bash
-python scripts/validate_slices_config.py
-```
-
-## Step 1: PDF extraction
-
-Put a PDF in `docs/`, for example:
-
-```text
-docs/sample.pdf
-```
-
-Run:
-
-```bash
-python scripts/extract_pages.py docs/sample.pdf
-```
-
-Optional smoke test with only the first 10 pages:
-
-```bash
-python scripts/extract_pages.py docs/sample.pdf --max-pages 10
-```
-
-Focused extraction from a specific page range:
-
-```bash
-python scripts/extract_pages.py docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf \
-  --page-start 115 \
-  --page-end 126 \
-  --out data/raw_pages.jsonl
-```
-
-Focused extraction from multiple page ranges:
-
-```bash
-python scripts/extract_pages.py docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf \
-  --page-ranges 257-259,307-314,1435-1455,1483-1488 \
-  --out data/raw_pages.jsonl
-```
-
-Output:
-
-```text
-data/raw_pages.jsonl
-```
-
-Each line is one PDF page with source, page metadata, character count, and text.
-
-## Step 2: Chunking
-
-Run:
-
-```bash
-python scripts/chunk_pages.py \
-  --input data/raw_pages.jsonl \
-  --output data/chunks.jsonl \
-  --source docs/sample.pdf
-```
-
-Output:
-
-```text
-data/chunks.jsonl
-```
-
-This first chunker works page-by-page so every chunk has stable page metadata:
-
-```json
-{
-  "chunk_id": "chunk-000000",
-  "source": "docs/sample.pdf",
-  "page_start": 1,
-  "page_end": 1,
-  "page_chunk_index": 0,
-  "chunk_index": 0,
-  "token_count": 800,
-  "text": "..."
-}
-```
-
-## Step 3: Embeddings and Semantic Search
-
-Build the local Chroma database:
-
-```bash
-python scripts/embed_chunks.py \
-  --chunks data/chunks.jsonl \
-  --db vector_db/chroma \
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+.venv/bin/python scripts/ingest_document.py \
+  --pdf docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf \
+  --doc-id aurix_tc3xx_full_mixed_smoke \
   --collection technical_docs \
+  --chunk-mode mixed \
+  --section-title "AURIX TC3xx Full Mixed Smoke" \
   --reset
 ```
 
-Run a retrieval-only search:
+Known smoke result (AURIX manual):
+
+- 2080 pages extracted
+- 2593 chunks embedded
+- hit@5 stayed 100% across the four known eval slices
+
+This is a smoke test only; it does not imply production readiness or tuned
+full-document retrieval.
+
+## Retrieval Eval
+
+Canonical auto-mode example:
 
 ```bash
-python scripts/search_chunks.py "reset behavior" \
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+.venv/bin/python scripts/eval_retrieval.py \
+  --mode auto \
+  --eval eval/memory_map_eval.json \
+  --chunks data/chunks_aurix_mixed_shared.jsonl \
   --db vector_db/chroma \
   --collection technical_docs
 ```
 
-This step is intentionally before the LLM. If search returns bad chunks, the LLM will only make the bad retrieval look nicer.
-
-## Focused Boot/BMHD Index
-
-For the first meaningful retrieval test, do not index the whole 2080-page PDF.
-Use a small real-content slice from the AURIX startup chapter:
+Manual modes:
 
 ```text
-PDF pages 115-126
-topic: startup, Boot Mode Header (BMHD), Alternate Boot Mode (ABM), no-valid-BMHD handling
+vector
+bm25
+hybrid
+bm25_table_boost
 ```
 
-This range is small, fast to re-index, and includes prose, procedures, and Table 45.
+Opt-in mode:
 
-Build the focused index:
+```text
+auto
+```
+
+Auto selection logic:
+
+```text
+if query is table-like and chunks JSONL contains table_row_group:
+    bm25_table_boost
+else:
+    hybrid
+```
+
+Known eval files:
+
+```text
+eval/memory_map_eval.json
+eval/boot_bmhd_eval.json
+eval/dma_cache_eval.json
+eval/interrupt_routing_eval.json
+```
+
+## Ask Chunks (Dry-Run Context)
+
+Dry-run does not call any model/API; it prints sources and the constructed prompt.
 
 ```bash
-python scripts/extract_pages.py docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf \
-  --page-start 115 \
-  --page-end 126 \
-  --out data/raw_pages.jsonl \
-  --no-preview
-
-python scripts/chunk_pages.py \
-  --input data/raw_pages.jsonl \
-  --output data/chunks.jsonl \
-  --source docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf
-
-python scripts/embed_chunks.py \
-  --chunks data/chunks.jsonl \
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+.venv/bin/python scripts/ask_chunks.py \
+  --question "What address range maps to Program Flash 0?" \
+  --chunks data/chunks_aurix_mixed_shared.jsonl \
   --db vector_db/chroma \
   --collection technical_docs \
-  --reset
-```
-
-Quick metadata check:
-
-```bash
-rg '"page_start": null|"page_end": null' data/chunks.jsonl
-```
-
-The command should print nothing.
-
-Retrieval quality checks:
-
-```bash
-python scripts/search_chunks.py "Boot Mode Header BMI HWCFG" --db vector_db/chroma --collection technical_docs
-python scripts/search_chunks.py "PINDIS bit 0 mode selection by configuration pins" --db vector_db/chroma --collection technical_docs
-python scripts/search_chunks.py "Alternate Boot Mode Header STADABM" --db vector_db/chroma --collection technical_docs
-python scripts/search_chunks.py "what happens if no valid Boot Mode Header is found" --db vector_db/chroma --collection technical_docs
-python scripts/search_chunks.py "RAM overwrite during startup CPU0 DSPR PSPR" --db vector_db/chroma --collection technical_docs
-python scripts/search_chunks.py "CRC calculation ABMHD CHKSTART CHKEND" --db vector_db/chroma --collection technical_docs
-```
-
-Run the mini retrieval eval:
-
-```bash
-python scripts/eval_retrieval.py \
-  --eval eval/boot_bmhd_eval.json \
-  --db vector_db/chroma \
-  --collection technical_docs
-```
-
-Inspect failing questions with snippets:
-
-```bash
-python scripts/eval_retrieval.py \
-  --eval eval/boot_bmhd_eval.json \
-  --db vector_db/chroma \
-  --collection technical_docs \
-  --debug-failures
-```
-
-Compare retrieval modes:
-
-```bash
-python scripts/eval_retrieval.py --mode vector --eval eval/boot_bmhd_eval.json
-python scripts/eval_retrieval.py --mode bm25 --eval eval/boot_bmhd_eval.json
-python scripts/eval_retrieval.py --mode hybrid --eval eval/boot_bmhd_eval.json
-```
-
-Expected retrieval targets:
-
-```text
-BMHD / BMI / HWCFG / PINDIS: pages 117-119
-ABM / STADABM / CHKSTART / CHKEND: pages 121-123
-no valid BMHD handling: pages 123-126
-RAM overwrite during startup: page 115
-```
-
-Table extraction check:
-
-```bash
-python scripts/search_chunks.py "PINDIS bit 0 mode selection by configuration pins" \
-  --db vector_db/chroma \
-  --collection technical_docs
-```
-
-For the current PyMuPDF baseline, a good result means page 117 appears in the top 3.
-If it does not, plain text extraction is probably too weak for register/table lookup and we should benchmark PyMuPDF4LLM or Docling next.
-
-## Focused DMA/Cache Index
-
-The second focused retrieval slice checks whether the retrieval approach generalizes beyond Boot/BMHD:
-
-```text
-PDF pages 257-259: PMA data/code cacheability and coherency notes
-PDF pages 307-314: PSPR/DSPR/PMI/PCACHE behavior and invalidation
-PDF pages 1435-1455: DMA requests, reset, move operation, address generation
-PDF pages 1483-1488: DMA checksum, DMARAM initialization, source/destination errors
-```
-
-Build the focused index:
-
-```bash
-python scripts/extract_pages.py docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf \
-  --page-ranges 257-259,307-314,1435-1455,1483-1488 \
-  --out data/raw_pages.jsonl \
-  --no-preview
-
-python scripts/chunk_pages.py \
-  --input data/raw_pages.jsonl \
-  --output data/chunks.jsonl \
-  --source docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf
-
-python scripts/embed_chunks.py \
-  --chunks data/chunks.jsonl \
-  --db vector_db/chroma \
-  --collection technical_docs \
-  --reset
-```
-
-Run the second mini retrieval eval:
-
-```bash
-python scripts/eval_retrieval.py --mode vector --eval eval/dma_cache_eval.json
-python scripts/eval_retrieval.py --mode bm25 --eval eval/dma_cache_eval.json
-python scripts/eval_retrieval.py --mode hybrid --eval eval/dma_cache_eval.json
-```
-
-Current baseline:
-
-```text
-vector: hit@1 90%, hit@3 100%, hit@5 100%
-bm25:   hit@1 80%, hit@3 100%, hit@5 100%
-hybrid: hit@1 90%, hit@3 100%, hit@5 100%
-```
-
-Detailed notes are in `eval/dma_cache_hybrid_baseline.md`.
-
-## Focused Interrupt Routing Index
-
-The third focused retrieval slice checks interrupt routing and service request terminology:
-
-```text
-PDF pages 1364-1397
-topic: Interrupt Router, SRN/SRC registers, TOS routing, ICU arbitration, GPSR/software interrupts
-```
-
-Build the focused index:
-
-```bash
-python scripts/extract_pages.py docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf \
-  --page-ranges 1364-1397 \
-  --out data/raw_pages.jsonl \
-  --no-preview
-
-python scripts/chunk_pages.py \
-  --input data/raw_pages.jsonl \
-  --output data/chunks.jsonl \
-  --source docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf
-
-python scripts/embed_chunks.py \
-  --chunks data/chunks.jsonl \
-  --db vector_db/chroma \
-  --collection technical_docs \
-  --reset
-```
-
-Run the third mini retrieval eval:
-
-```bash
-python scripts/eval_retrieval.py --mode vector --eval eval/interrupt_routing_eval.json
-python scripts/eval_retrieval.py --mode bm25 --eval eval/interrupt_routing_eval.json
-python scripts/eval_retrieval.py --mode hybrid --eval eval/interrupt_routing_eval.json
-```
-
-Current baseline:
-
-```text
-vector: hit@1 80%, hit@3 90%, hit@5 90%
-bm25:   hit@1 60%, hit@3 90%, hit@5 90%
-hybrid: hit@1 70%, hit@3 100%, hit@5 100%
-```
-
-Detailed notes are in `eval/interrupt_routing_hybrid_baseline.md`.
-
-## First Grounded RAG Answer
-
-This slice adds a strict citation-first answer layer on top of retrieval.
-Retrieval eval remains the regression gate. If retrieval misses relevant pages, answer quality is not trustworthy.
-
-Dry-run (no model call):
-
-```bash
-python scripts/ask_chunks.py \
-  --question "What does the Interrupt Router module schedule?" \
-  --mode hybrid \
-  --top-k 5 \
-  --dry-run
-```
-
-OpenAI API example:
-
-```bash
-export OPENAI_API_KEY="..."
-
-python scripts/ask_chunks.py \
-  --question "What does the Interrupt Router module schedule?" \
-  --mode hybrid \
-  --top-k 5 \
-  --model gpt-5.5 \
-  --base-url https://api.openai.com/v1
-```
-
-Another OpenAI-compatible endpoint example:
-
-```bash
-python scripts/ask_chunks.py \
-  --question "What does the Interrupt Router module schedule?" \
-  --mode hybrid \
-  --top-k 5 \
-  --model local-model \
-  --base-url http://localhost:8000/v1 \
-  --token-param max_tokens
-```
-
-Important:
-
-```text
-- Verify citations like [S1], [S2] are present in the answer.
-- Treat no-citation answers as ungrounded.
-- Keep running retrieval eval slices (boot/dma/interrupt) after retrieval changes.
-- Use --token-param max_tokens for endpoints that do not support max_completion_tokens.
-```
-
-Batch answer eval:
-
-```bash
-python scripts/run_answer_eval.py \
-  --eval eval/interrupt_routing_eval.json \
-  --mode hybrid \
-  --top-k 3 \
-  --candidate-k 8 \
-  --model gpt-5.4-nano \
-  --base-url https://api.openai.com/v1 \
-  --output-jsonl eval/rag_answer_interrupt_gpt54nano_batch.jsonl \
-  --overwrite
-```
-
-JSONL output is protected by default: `run_answer_eval.py` refuses to write to an existing
-output file unless the behavior is explicit. Use `--overwrite` for repeatable batch eval
-runs, and use `--append` only when intentionally collecting multiple runs in the same
-JSONL file.
-
-Dry-run batch smoke test:
-
-```bash
-python scripts/run_answer_eval.py \
-  --eval eval/interrupt_routing_eval.json \
-  --limit 2 \
-  --mode hybrid \
-  --top-k 3 \
-  --candidate-k 8 \
+  --mode auto \
   --dry-run \
-  --output-jsonl /tmp/rag_answer_batch_dry_run.jsonl \
-  --overwrite
-```
-
-Manual grading stays human-reviewed for now. Use `eval/rag_answer_manual_grading_template.md` as the report format.
-
-## Step 4: First RAG Answer
-
-`scripts/ask_chunks.py` expects an OpenAI-compatible chat completion endpoint.
-
-For local Ollama:
-
-```bash
-export LLM_BASE_URL="http://localhost:11434/v1"
-export LLM_MODEL="qwen2.5:7b"
-```
-
-Ask a question:
-
-```bash
-python scripts/ask_chunks.py \
-  --question "What does the document say about reset behavior?" \
-  --db vector_db/chroma \
-  --collection technical_docs
-```
-
-To debug retrieval context:
-
-```bash
-python scripts/ask_chunks.py \
-  --question "What does the document say about reset behavior?" \
-  --db vector_db/chroma \
-  --collection technical_docs \
   --show-context
 ```
 
-## Definition of Done for Iteration 1
+## Answer Generation (OpenAI-Compatible)
 
-- `data/raw_pages.jsonl` exists after extraction.
-- Extracted text is readable enough for a PoC.
-- `data/chunks.jsonl` exists after chunking.
-- Chunks have non-empty text.
-- `page_start` and `page_end` are never `null`.
-- `vector_db/chroma/` exists after embedding.
-- `search_chunks.py` returns relevant chunks with source/page metadata.
-- `ask_chunks.py` can produce a grounded answer with sources when a local LLM endpoint is available.
+Requires `OPENAI_API_KEY` in the environment. `--base-url` can point to OpenAI or
+another OpenAI-compatible API.
 
-Next iteration starts with retrieval evaluation and parser benchmarking.
+```bash
+OPENAI_API_KEY=... \
+.venv/bin/python scripts/ask_chunks.py \
+  --question "What does the SRPN field define in the SRC register?" \
+  --chunks data/chunks_aurix_mixed_shared.jsonl \
+  --db vector_db/chroma \
+  --collection technical_docs \
+  --mode auto \
+  --model <openai-compatible-model> \
+  --base-url https://api.openai.com/v1 \
+  --max-tokens 250
+```
+
+## Tests
+
+```bash
+.venv/bin/python -m pytest tests
+```
+
+Known baseline: `17 passed`.
+
+## Generated Artifacts and Cleanup
+
+Generated / gitignored:
+
+```text
+data/*.jsonl
+vector_db/
+```
+
+Notes:
+
+- chunks JSONL is the stable artifact used for BM25/eval/debugging
+- raw pages and table candidates are intermediate debug artifacts in mixed mode
+- PDFs under `docs/` may be vendor documents; do not redistribute unless allowed
+
+## Offline / Cache Notes
+
+If the embedding model is already cached locally, these env vars avoid slow
+network attempts:
+
+```bash
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+```
+
+This will not work if the model is not cached.
+
+## Known Limitations
+
+- `auto` is heuristic, not a reranker
+- full-document retrieval has more competition than focused slices
+- hit@1/hit@3 can vary slightly with HNSW rebuilds
+- no reranker, no parent-child retrieval
+- no PDF layout parser (Camelot/Docling/Unstructured)
+- no automatic answer grading
+
+## Useful Docs
+
+```text
+docs/PHASE3_INTEGRATION_CHECKPOINT.md
+docs/experiments/FULL_DOCUMENT_MIXED_INGEST_SMOKE.md
+docs/design/DETECTOR_DRIVEN_MIXED_INGEST_DESIGN.md
+```
