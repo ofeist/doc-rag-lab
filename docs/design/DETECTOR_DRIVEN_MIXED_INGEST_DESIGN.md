@@ -263,9 +263,15 @@ Conservative sequence, each slice independently shippable:
   `generic` default. `generic` runs the current chain unchanged; `mixed` is a stub
   that exits clearly with a not-implemented message until P3-19. No behavior change
   for the default path.
-- **P3-19** — make `mixed` ingest write a schema-compatible chunk JSONL (close
-  section-5 gap 1: generic chunks carry `chunk_type` + empty table fields) and
-  embed it end to end. Re-confirm the P3-13 / P3-16 baselines.
+- **P3-19** (done) — `mixed` ingest runs end to end through `ingest_document.py`
+  (extract -> detect -> build_mixed -> embed over doc_id-scoped intermediates) and
+  section-5 gap 1 is closed: generic chunks now carry `chunk_type` + empty table
+  fields, so all modes emit one schema. Corpus is structurally identical to the
+  manual P3-13 / P3-16 path; hit@5 is 100% on all four slices. See
+  `docs/experiments/MIXED_INGEST_END_TO_END_EXPERIMENT.md`. Gap 2 (persist
+  `chunk_type` to Chroma) is still open for P3-22; the experiment also noted
+  hybrid hit@1/hit@3 vary by ~1 question across rebuilds due to HNSW index
+  nondeterminism.
 - **P3-20** — add the ingest report summary (detector summary + chunk-type counts
   + guardrail warnings) to `ingest_document.py` output.
 - **P3-21** — add `--keep-intermediate-artifacts`; default to writing the chunk
