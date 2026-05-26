@@ -1,0 +1,4 @@
+-r requirements-rag.txt
+
+# Test-only tooling (P3-20B). Not needed to run the pipeline.
+pytest==9.0.3
