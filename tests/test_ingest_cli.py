@@ -17,3 +17,4 @@ def test_ingest_document_help_exposes_chunk_mode() -> None:
     assert "--chunk-mode" in result.stdout
     assert "generic" in result.stdout
     assert "mixed" in result.stdout
+    assert "--keep-intermediate-artifacts" in result.stdout

@@ -73,6 +73,18 @@ def run_script(name: str, script_args: list[str]) -> None:
     subprocess.run(cmd, check=True)
 
 
+def cleanup_mixed_intermediates(paths: list[Path], keep: bool) -> list[Path]:
+    if keep:
+        return []
+
+    deleted: list[Path] = []
+    for path in paths:
+        if path.exists():
+            path.unlink()
+            deleted.append(path)
+    return deleted
+
+
 def print_summary(
     chunk_mode: str,
     doc_id: str,
@@ -124,6 +136,8 @@ def print_mixed_report(
     candidates_summary: dict,
     chunk_types: collections.Counter,
     routed_pages: list[int],
+    keep_intermediate_artifacts: bool = False,
+    deleted_intermediates: list[Path] | None = None,
 ) -> None:
     print()
     print("Ingest summary:")
@@ -138,6 +152,20 @@ def print_mixed_report(
     print(f"  collection       : {collection}")
     print(f"  pages_extracted  : {page_count}")
     print(f"  chunks_written   : {chunk_count}")
+
+    deleted_intermediates = deleted_intermediates or []
+    print()
+    print("Artifacts:")
+    print(f"  chunks kept       : {chunks_path}")
+    if keep_intermediate_artifacts:
+        print("  intermediates    : kept")
+    else:
+        print("  intermediates    : cleaned")
+        if deleted_intermediates:
+            print(
+                "  deleted          : "
+                + ", ".join(str(path) for path in deleted_intermediates)
+            )
 
     print()
     print("Table detection:")
@@ -219,7 +247,8 @@ def run_generic_ingest(args: argparse.Namespace) -> int:
 def run_mixed_ingest(args: argparse.Namespace) -> int:
     # Detector-driven mixed ingest (P3-19). Orchestrates the proven experimental
     # scripts over doc_id-scoped intermediate files under data/. These are
-    # generated artifacts and stay gitignored; artifact cleanup is P3-21.
+    # generated artifacts and stay gitignored. Raw pages and table candidates are
+    # cleaned after a successful embed unless explicitly kept for debugging.
     raw_pages_path = Path(f"data/raw_pages_{args.doc_id}.jsonl")
     candidates_path = Path(f"data/table_page_candidates_{args.doc_id}.jsonl")
     chunks_path = Path(f"data/chunks_{args.doc_id}.jsonl")
@@ -276,6 +305,10 @@ def run_mixed_ingest(args: argparse.Namespace) -> int:
         batch_size=args.batch_size,
         reset=args.reset,
     )
+    deleted_intermediates = cleanup_mixed_intermediates(
+        [raw_pages_path, candidates_path],
+        keep=args.keep_intermediate_artifacts,
+    )
 
     print_mixed_report(
         doc_id=args.doc_id,
@@ -291,6 +324,8 @@ def run_mixed_ingest(args: argparse.Namespace) -> int:
         candidates_summary=candidates_summary,
         chunk_types=chunk_types,
         routed_pages=routed_pages,
+        keep_intermediate_artifacts=args.keep_intermediate_artifacts,
+        deleted_intermediates=deleted_intermediates,
     )
     return 0
 
@@ -372,6 +407,15 @@ def main() -> int:
         type=int,
         default=DEFAULT_TABLE_RESIDUAL_OVERLAP,
         help=f"Token overlap for non-table residual text on detected table pages. Default: {DEFAULT_TABLE_RESIDUAL_OVERLAP}",
+    )
+    mixed_group.add_argument(
+        "--keep-intermediate-artifacts",
+        action="store_true",
+        help=(
+            "In mixed mode, keep raw pages and table candidate JSONL files. "
+            "By default, they are removed after successful embedding while "
+            "data/chunks_<doc_id>.jsonl is kept."
+        ),
     )
     args = parser.parse_args()
 

@@ -282,8 +282,11 @@ Conservative sequence, each slice independently shippable:
   report summaries, guardrail warnings, and CLI exposure of `--chunk-mode`.
   Test-only; no production pipeline behavior changes. See
   `docs/experiments/MIXED_INGEST_INVARIANT_TESTS.md`.
-- **P3-21** — add `--keep-intermediate-artifacts`; default to writing the chunk
-  JSONL only and cleaning raw/candidate intermediates.
+- **P3-21** (done) — added `--keep-intermediate-artifacts`; mixed mode now keeps
+  `data/chunks_<doc_id>.jsonl` by default and cleans raw-page/table-candidate
+  intermediates only after successful embedding. The flag keeps all generated
+  JSONL artifacts for debugging. See
+  `docs/experiments/MIXED_INGEST_ARTIFACT_CLEANUP_EXPERIMENT.md`.
 - **P3-22** — design and implement automatic retrieval-mode selection using the
   section-6 signals (requires section-5 gap 2: persist `chunk_type` to Chroma).
 
