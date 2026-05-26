@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import collections
 import json
 import subprocess
 import sys
@@ -31,13 +32,39 @@ def add_doc_id(records: list[dict], doc_id: str) -> list[dict]:
     return records
 
 
-def count_jsonl_lines(path: Path) -> int:
-    count = 0
+def load_jsonl_records(path: Path) -> list[dict]:
+    records: list[dict] = []
     with path.open("r", encoding="utf-8") as f:
         for line in f:
-            if line.strip():
-                count += 1
-    return count
+            line = line.strip()
+            if line:
+                records.append(json.loads(line))
+    return records
+
+
+def summarize_table_candidates(path: Path) -> dict:
+    records = load_jsonl_records(path)
+    page_types = collections.Counter(str(record.get("page_type", "")) for record in records)
+    return {
+        "candidate_count": len(records),
+        "address_map_table": page_types.get("address_map_table", 0),
+        "generic_table": page_types.get("generic_table", 0),
+    }
+
+
+def summarize_chunks(path: Path) -> tuple[collections.Counter, list[int]]:
+    records = load_jsonl_records(path)
+    chunk_types: collections.Counter = collections.Counter(
+        str(record.get("chunk_type", "")) for record in records
+    )
+    routed_pages = sorted(
+        {
+            int(record.get("page_start", -1))
+            for record in records
+            if str(record.get("chunk_type", "")) == "table_row_group"
+        }
+    )
+    return chunk_types, routed_pages
 
 
 def run_script(name: str, script_args: list[str]) -> None:
@@ -76,6 +103,70 @@ def print_summary(
     print()
     print("Ingest summary:")
     print(json.dumps(summary, indent=2, ensure_ascii=False))
+
+
+# Pages above this routed fraction are flagged as likely detector over-selection.
+TABLE_ROUTED_PAGE_WARN_RATIO = 0.60
+
+
+def print_mixed_report(
+    *,
+    doc_id: str,
+    pdf: Path,
+    page_ranges: str | None,
+    raw_pages_path: Path,
+    candidates_path: Path,
+    chunks_path: Path,
+    db_path: Path,
+    collection: str,
+    page_count: int,
+    chunk_count: int,
+    candidates_summary: dict,
+    chunk_types: collections.Counter,
+    routed_pages: list[int],
+) -> None:
+    print()
+    print("Ingest summary:")
+    print(f"  chunk_mode       : mixed")
+    print(f"  doc_id           : {doc_id}")
+    print(f"  page_range       : {page_ranges or 'full'}")
+    print(f"  pdf              : {pdf}")
+    print(f"  raw_pages        : {raw_pages_path}")
+    print(f"  table_candidates : {candidates_path}")
+    print(f"  chunks           : {chunks_path}")
+    print(f"  db               : {db_path}")
+    print(f"  collection       : {collection}")
+    print(f"  pages_extracted  : {page_count}")
+    print(f"  chunks_written   : {chunk_count}")
+
+    print()
+    print("Table detection:")
+    print(f"  candidate pages emitted : {candidates_summary['candidate_count']}")
+    print(f"  address_map_table       : {candidates_summary['address_map_table']}")
+    print(f"  generic_table           : {candidates_summary['generic_table']}")
+    print(f"  table_row_group routed  : {len(routed_pages)} pages {routed_pages}")
+
+    print()
+    print("Chunk types:")
+    print(f"  generic_page     : {chunk_types.get('generic_page', 0)}")
+    print(f"  table_row_group  : {chunk_types.get('table_row_group', 0)}")
+    print(f"  generic_residual : {chunk_types.get('generic_residual', 0)}")
+
+    warnings: list[str] = []
+    if chunk_types.get("table_row_group", 0) == 0:
+        warnings.append(
+            "WARNING: no table_row_group chunks were produced. "
+            "Mixed mode behaved like generic ingest."
+        )
+    if page_count > 0 and len(routed_pages) / page_count > TABLE_ROUTED_PAGE_WARN_RATIO:
+        warnings.append(
+            "WARNING: more than 60% of pages were routed to table_row_group. "
+            "Check detector over-selection."
+        )
+    if warnings:
+        print()
+        for warning in warnings:
+            print(warning)
 
 
 def run_generic_ingest(args: argparse.Namespace) -> int:
@@ -170,7 +261,10 @@ def run_mixed_ingest(args: argparse.Namespace) -> int:
             "--table-residual-overlap", str(args.table_residual_overlap),
         ],
     )
-    chunk_count = count_jsonl_lines(chunks_path)
+
+    candidates_summary = summarize_table_candidates(candidates_path)
+    chunk_types, routed_pages = summarize_chunks(chunks_path)
+    chunk_count = sum(chunk_types.values())
 
     print()
     print("Step 4/4: embedding chunks")
@@ -183,18 +277,20 @@ def run_mixed_ingest(args: argparse.Namespace) -> int:
         reset=args.reset,
     )
 
-    print_summary(
-        chunk_mode="mixed",
+    print_mixed_report(
         doc_id=args.doc_id,
         pdf=args.pdf,
         page_ranges=args.page_ranges,
         raw_pages_path=raw_pages_path,
+        candidates_path=candidates_path,
         chunks_path=chunks_path,
         db_path=args.db,
         collection=args.collection,
         page_count=len(pages),
         chunk_count=chunk_count,
-        candidates_path=candidates_path,
+        candidates_summary=candidates_summary,
+        chunk_types=chunk_types,
+        routed_pages=routed_pages,
     )
     return 0
 
