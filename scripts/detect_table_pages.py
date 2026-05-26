@@ -154,7 +154,7 @@ def detect_page(record: dict[str, Any]) -> dict[str, Any]:
     else:
         page_type = "unknown"
 
-    if page_type in {"address_map_table", "generic_table"}:
+    if page_type == "address_map_table":
         recommended_chunker = "table_row_group"
     else:
         recommended_chunker = "generic"
