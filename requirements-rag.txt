@@ -1,5 +1,6 @@
 -r requirements.txt
 
+chroma-hnswlib==0.7.5
 chromadb==0.5.23
 requests==2.32.3
 rank-bm25==0.2.2

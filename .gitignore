@@ -7,3 +7,4 @@ vector_db/
 
 docs/*.pdf
 .claude/settings.local.json
+/.claude
