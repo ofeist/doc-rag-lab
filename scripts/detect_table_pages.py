@@ -117,6 +117,10 @@ def detect_page(record: dict[str, Any]) -> dict[str, Any]:
         score += 0.20
         reasons.append("contains table title or table-like title terms")
 
+    if table_title_count >= 2:
+        score += 0.10
+        reasons.append("contains multiple table references")
+
     if address_start_count >= 3 and address_end_count >= 3:
         score += 0.25
         reasons.append("contains multiple split hex address ranges")
