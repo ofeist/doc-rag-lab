@@ -672,20 +672,21 @@ no answer: insufficient retrieval confidence
 The next best implementation slice is:
 
 ```text
-P3-1 — Table-aware row-group chunking experiment for memory_map
+P3-6A — Cleanup old memory-map-specific table builder and keep one canonical builder path
 ```
 
 Why:
 
 ```text
-The memory_map stress slice showed that dense tables are the current bottleneck.
-BM25 plus smaller chunks improved retrieval, but did not fully solve exact table-row lookup.
-The next step should preserve table title/header/row-group context before investing in larger parser migrations or rerankers.
+Table-aware experiments already produced measurable gains on memory_map.
+The immediate risk is process drift: two builder scripts and mixed documentation paths.
+Before new retrieval ideas, we should reduce ambiguity and lock the canonical workflow.
 ```
 
-Suggested first P3 acceptance signal:
+Suggested acceptance signal:
 
 ```text
-Improve memory_map retrieval beyond the current 300/60 BM25 baseline,
-without regressing boot_bmhd, dma_cache, or interrupt_routing.
+All active docs/examples use scripts/build_table_aware_chunks.py as the canonical path.
+scripts/build_memory_map_table_chunks.py is explicitly marked superseded or removed in cleanup.
+No regression in retrieval baselines for boot_bmhd, dma_cache, interrupt_routing, memory_map.
 ```
