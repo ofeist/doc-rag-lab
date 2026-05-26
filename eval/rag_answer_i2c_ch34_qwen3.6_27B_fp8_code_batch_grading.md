@@ -11,7 +11,7 @@ retrieval mode:     hybrid (RRF)
 top_k: 5, candidate_k: 12, rrf_k: 60
 model:              code (Qwen 3.6 27B FP8)
 base_url:           http://106.106.152.161:4000/v1
-max_tokens:         900
+max_tokens:         2000
 date:               2026-05-26
 grader:             manual
 ```
@@ -104,6 +104,7 @@ grader:             manual
 
 ## Recommendations
 
+- **max_tokens=2000** is required for this reasoning model (Qwen 3.6 27B FP8) — lower values cause empty answers
 - **i2c-008:** Consider raising candidate-k to 16 to pull in page 1383 (baudrate details) which is at rank 4 in vector but may not make top-12 hybrid.
 - **i2c-005:** The "idle state" detail is in the PDF but buried in a chunk not retrieved. Could be addressed by slightly lowering chunk_size (e.g., 500 instead of 800) to create denser chunks.
 - **Overall:** Solid baseline. No tuning needed for first slice. Hybrid at top-k=5 / candidate-k=12 is a good default for I2C.
