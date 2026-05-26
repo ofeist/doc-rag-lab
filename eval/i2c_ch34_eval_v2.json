@@ -1,0 +1,111 @@
+[
+  {
+    "id": "i2c-v2-001",
+    "question": "Is the master mode supported?",
+    "expected_pages": [
+      1383,
+      1394,
+      1396,
+      1398,
+      1436
+    ]
+  },
+  {
+    "id": "i2c-v2-002",
+    "question": "What are the supported data transfer rates?",
+    "expected_pages": [
+      1378,
+      1379,
+      1399,
+      1400,
+      1414
+    ]
+  },
+  {
+    "id": "i2c-v2-003",
+    "question": "How are the start and stop conditions realized?",
+    "expected_pages": [
+      1377,
+      1378,
+      1384,
+      1393,
+      1413
+    ]
+  },
+  {
+    "id": "i2c-v2-004",
+    "question": "How to do the 10-bit slave addressing?",
+    "expected_pages": [
+      1378,
+      1381,
+      1392,
+      1398,
+      1435
+    ]
+  },
+  {
+    "id": "i2c-v2-005",
+    "question": "Which register is used to select the operational mode?",
+    "expected_pages": [
+      1417,
+      1423,
+      1429,
+      1431,
+      1436
+    ]
+  },
+  {
+    "id": "i2c-v2-006",
+    "question": "Which bit is used to trigger the data transmission?",
+    "expected_pages": [
+      1392,
+      1396,
+      1414,
+      1434,
+      1435
+    ]
+  },
+  {
+    "id": "i2c-v2-007",
+    "question": "What is the address of the Identification Register?",
+    "expected_pages": [
+      1424,
+      1430,
+      1431,
+      1432,
+      1433
+    ]
+  },
+  {
+    "id": "i2c-v2-008",
+    "question": "What does GCE bit of ADDRCFG register represent?",
+    "expected_pages": [
+      1395,
+      1426,
+      1431,
+      1433,
+      1443
+    ]
+  },
+  {
+    "id": "i2c-v2-009",
+    "question": "Which interrupts are recommended to be enabled?",
+    "expected_pages": [
+      1395,
+      1447,
+      1449,
+      1454,
+      1456
+    ]
+  },
+  {
+    "id": "i2c-v2-010",
+    "question": "If the receive interrupt is not being triggered, what should be checked first?",
+    "expected_pages": [
+      1392,
+      1393,
+      1395,
+      1455
+    ]
+  }
+]
