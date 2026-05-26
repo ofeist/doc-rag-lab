@@ -22,7 +22,7 @@ does not run answer batch eval.
 | Document | `docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf` |
 | Eval file | `eval/memory_map_eval.json` (10 questions, page-level hit@k) |
 | Embedding model | `BAAI/bge-small-en-v1.5` |
-| Builder | `scripts/build_memory_map_table_chunks.py` |
+| Builder | `scripts/build_table_aware_chunks.py` |
 
 Both chunk files are generated experiment artifacts under `data/` (gitignored,
 not committed):
@@ -47,7 +47,16 @@ segment markers        : accepted=31, skipped=0  (segment detection reliable)
 ### Reproduce
 
 ```bash
-.venv/bin/python scripts/build_memory_map_table_chunks.py
+.venv/bin/python scripts/build_table_aware_chunks.py \
+  --input data/raw_pages.jsonl \
+  --output data/chunks_table_aware_memory_map.jsonl \
+  --doc-id memory_map \
+  --source docs/infineon-aurix-tc3xx-part1-usermanual-en.pdf \
+  --page-ranges 90-102 \
+  --section-title "Memory Maps (MEMMAP)" \
+  --group-size 4 \
+  --residual-chunk-size 300 \
+  --residual-overlap 60
 
 .venv/bin/python scripts/embed_chunks.py \
   --chunks data/chunks_table_aware_memory_map.jsonl \

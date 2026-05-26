@@ -667,9 +667,9 @@ no answer: insufficient retrieval confidence
 
 ---
 
-## Recommended Next Concrete Step
+## Latest Completed Cleanup
 
-The next best implementation slice is:
+The latest completed cleanup slice is:
 
 ```text
 P3-6A — Cleanup old memory-map-specific table builder and keep one canonical builder path
@@ -683,10 +683,26 @@ The immediate risk is process drift: two builder scripts and mixed documentation
 Before new retrieval ideas, we should reduce ambiguity and lock the canonical workflow.
 ```
 
-Suggested acceptance signal:
+Acceptance signal:
 
 ```text
 All active docs/examples use scripts/build_table_aware_chunks.py as the canonical path.
-scripts/build_memory_map_table_chunks.py is explicitly marked superseded or removed in cleanup.
+scripts/build_memory_map_table_chunks.py is removed.
 No regression in retrieval baselines for boot_bmhd, dma_cache, interrupt_routing, memory_map.
+```
+
+## Recommended Next Concrete Step
+
+The next best implementation slice is:
+
+```text
+P3-7 — Pick the next table-heavy failure slice before adding heavier machinery
+```
+
+Why:
+
+```text
+memory_map now has a canonical table-aware builder path and preserved retrieval
+results. The next useful signal should come from a different dense-table slice,
+not from tuning the same slice further.
 ```

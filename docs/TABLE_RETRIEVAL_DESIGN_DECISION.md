@@ -66,9 +66,10 @@ output: table_row_group chunks (with table title, segment/context, headers
 rank:   table_boost applied to table_row_group chunks on table-like queries
 ```
 
-The current builder (`scripts/build_memory_map_table_chunks.py`) is a
-`memory_map`-specific prototype. Generalizing its table detection to other dense
-slices is future work (P3-5+), gated by a real failing slice — not done here.
+The current builder (`scripts/build_table_aware_chunks.py`) exposes the
+table-aware row-group behavior through a generalized CLI. Its heuristics are
+still tuned to AURIX-style address-map tables, so applying it to other dense
+slices remains an explicit experiment rather than part of normal ingest.
 
 ## Non-goals (for now)
 
