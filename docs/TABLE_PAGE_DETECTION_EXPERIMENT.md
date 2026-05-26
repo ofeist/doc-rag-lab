@@ -102,6 +102,7 @@ Scoring:
 
 ```text
 +0.20 table title or table-like title terms
++0.10 multiple table references on the same page
 +0.25 at least 3 split address starts and ends
 +0.20 at least 10 address starts
 +0.15 at least 3 column header terms
@@ -130,7 +131,7 @@ The current validation used extracted AURIX `memory_map` pages:
 page range: 90-102
 min score: 0.5
 scanned pages: 13
-detected table-heavy pages: 12
+detected table-heavy pages: 13
 detected address-map pages: 12
 ```
 
@@ -138,28 +139,27 @@ Important target pages were detected:
 
 | Page | Result | Notes |
 | --- | --- | --- |
+| 90 | detected | `generic_table`, score 0.55 |
 | 93 | detected | `address_map_table`, score 1.0 |
 | 94 | detected | `address_map_table`, score 1.0 |
 | 96 | detected | `address_map_table`, score 1.0 |
 | 97 | detected | `address_map_table`, score 1.0 |
 | 100 | detected | `address_map_table`, score 1.0 |
 
-Page 90 was not emitted at `--min-score 0.5`. This is acceptable for the current
-goal because page 90 is mostly introductory prose plus acronym definitions, not
-a dense address-map page. It may still be useful context for answers, but it is
-not the primary target for table-aware row-group chunking.
+Page 90 is emitted as `generic_table`, not `address_map_table`. This is useful
+because it contains Table 23 acronym definitions and segment summary context
+used by the `memory_map` eval, even though it is not a dense address-map page.
 
 ## Observations
 
 False negatives:
 
-- Page 90 is below threshold. This is acceptable for address-map page detection,
-  but future mixed ingest should still preserve prose context through normal
-  chunks.
+- No false negatives were observed for the current `memory_map` eval target
+  pages at `--min-score 0.5`.
 
 False positives:
 
-- Within the focused 90-102 validation range, pages 91-102 are all plausible
+- Within the focused 90-102 validation range, pages 90-102 are all plausible
   table-heavy candidates because they contain address map setup text, table
   headers, dense address rows, or continuation tables.
 - Broader-document false positive behavior is not measured yet.

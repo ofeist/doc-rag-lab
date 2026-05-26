@@ -92,6 +92,24 @@ def page_in_ranges(page: int, ranges: list[tuple[int, int]]) -> bool:
     return any(start <= page <= end for start, end in ranges)
 
 
+def pages_to_ranges(pages: list[int]) -> list[tuple[int, int]]:
+    if not pages:
+        return []
+
+    ranges: list[tuple[int, int]] = []
+    start = pages[0]
+    end = pages[0]
+    for page in pages[1:]:
+        if page == end + 1:
+            end = page
+            continue
+        ranges.append((start, end))
+        start = page
+        end = page
+    ranges.append((start, end))
+    return ranges
+
+
 def read_jsonl(path: Path) -> Iterator[dict]:
     with path.open("r", encoding="utf-8") as f:
         for line_number, line in enumerate(f, start=1):
@@ -102,6 +120,41 @@ def read_jsonl(path: Path) -> Iterator[dict]:
                 yield json.loads(line)
             except json.JSONDecodeError as exc:
                 raise ValueError(f"Invalid JSON on line {line_number} in {path}") from exc
+
+
+def load_candidate_pages(path: Path, min_score: float) -> tuple[list[int], int]:
+    if not path.exists():
+        raise SystemExit(f"--table-candidates not found: {path}")
+
+    pages: list[int] = []
+    total = 0
+    for line_number, record in enumerate(read_jsonl(path), start=1):
+        total += 1
+        missing = [
+            field
+            for field in ("page", "table_likelihood", "recommended_chunker")
+            if field not in record
+        ]
+        if missing:
+            fields = ", ".join(missing)
+            raise SystemExit(f"Invalid candidate record on line {line_number}: missing {fields}")
+
+        try:
+            page = int(record["page"])
+            score = float(record["table_likelihood"])
+        except (TypeError, ValueError) as exc:
+            raise SystemExit(f"Invalid candidate record on line {line_number}: bad page/score") from exc
+
+        if str(record["recommended_chunker"]) == "table_row_group" and score >= min_score:
+            pages.append(page)
+
+    selected = sorted(set(pages))
+    if not selected:
+        raise SystemExit(
+            "No table candidate pages passed the filter "
+            f"(recommended_chunker=table_row_group, min_score={min_score})"
+        )
+    return selected, total
 
 
 def is_boilerplate(line: str, section_title_low: str) -> bool:
@@ -388,8 +441,19 @@ def main() -> None:
     parser.add_argument("--source", required=True, help="Source document path for metadata.")
     parser.add_argument(
         "--page-ranges",
-        required=True,
+        default=None,
         help="Pages to use, e.g. '90-102' or '90-94,96,100-102'.",
+    )
+    parser.add_argument(
+        "--table-candidates",
+        default=None,
+        help="Detector output JSONL. Selected pages replace manual --page-ranges.",
+    )
+    parser.add_argument(
+        "--min-table-score",
+        type=float,
+        default=0.5,
+        help="Minimum table_likelihood for --table-candidates selection. Default: 0.5",
     )
     parser.add_argument(
         "--section-title",
@@ -403,15 +467,32 @@ def main() -> None:
 
     if args.residual_overlap >= args.residual_chunk_size:
         raise SystemExit("--residual-overlap must be smaller than --residual-chunk-size")
+    if args.page_ranges and args.table_candidates:
+        raise SystemExit("Provide only one of --page-ranges or --table-candidates, not both")
+    if not args.page_ranges and not args.table_candidates:
+        raise SystemExit("Provide either --page-ranges or --table-candidates")
+    if not 0.0 <= args.min_table_score <= 1.0:
+        raise SystemExit("--min-table-score must be between 0.0 and 1.0")
 
     input_path = Path(args.input)
     if not input_path.exists():
         raise SystemExit(f"--input not found: {input_path}")
 
-    ranges = parse_page_ranges(args.page_ranges)
+    selected_pages: list[int] | None = None
+    candidate_count: int | None = None
+    if args.table_candidates:
+        selected_pages, candidate_count = load_candidate_pages(
+            Path(args.table_candidates),
+            args.min_table_score,
+        )
+        ranges = pages_to_ranges(selected_pages)
+    else:
+        ranges = parse_page_ranges(args.page_ranges)
+
     records = [r for r in read_jsonl(input_path) if page_in_ranges(int(r["page"]), ranges)]
     if not records:
-        raise SystemExit(f"No pages matching --page-ranges {args.page_ranges!r} found in {input_path}")
+        selector = args.table_candidates or args.page_ranges
+        raise SystemExit(f"No pages matching selection {selector!r} found in {input_path}")
 
     encoding = tiktoken.get_encoding("cl100k_base")
     section_title_low = args.section_title.strip().lower()
@@ -453,7 +534,17 @@ def main() -> None:
 
     print(f"Wrote {len(all_chunks)} chunks to {args.output}")
     print(f"  doc_id                 : {args.doc_id}")
-    print(f"  page ranges            : {ranges}")
+    if args.table_candidates:
+        print(f"  table candidates       : {args.table_candidates}")
+        print(f"  loaded candidates      : {candidate_count}")
+        print(f"  selected table pages   : {len(selected_pages or [])}")
+        print(
+            "  selection filter       : "
+            f"recommended_chunker=table_row_group, min_score={args.min_table_score}"
+        )
+        print(f"  selected pages         : {selected_pages}")
+    else:
+        print(f"  page ranges            : {ranges}")
     print(f"  table_row_group chunks : {len(row_chunks)}  ({len(rows)} rows)")
     print(f"  generic_residual chunks: {len(residual_chunks)}")
     print(f"  pages covered          : {pages_covered}")
