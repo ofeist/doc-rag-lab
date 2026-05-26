@@ -259,9 +259,10 @@ these through `ingest_document.py`.
 
 Conservative sequence, each slice independently shippable:
 
-- **P3-18** — add `--chunk-mode {generic,mixed}` to `ingest_document.py`,
-  `generic` default. Wire `generic` to the current chain; `mixed` may be a stub
-  that errors with a clear message until P3-19. No behavior change for default.
+- **P3-18** (done) — add `--chunk-mode {generic,mixed}` to `ingest_document.py`,
+  `generic` default. `generic` runs the current chain unchanged; `mixed` is a stub
+  that exits clearly with a not-implemented message until P3-19. No behavior change
+  for the default path.
 - **P3-19** — make `mixed` ingest write a schema-compatible chunk JSONL (close
   section-5 gap 1: generic chunks carry `chunk_type` + empty table fields) and
   embed it end to end. Re-confirm the P3-13 / P3-16 baselines.

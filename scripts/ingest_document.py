@@ -86,7 +86,24 @@ def main() -> int:
         action="store_true",
         help="Delete existing ChromaDB directory before embedding.",
     )
+    parser.add_argument(
+        "--chunk-mode",
+        choices=["generic", "mixed"],
+        default="generic",
+        help=(
+            "Chunking mode. 'generic' (default) keeps the current page-aware "
+            "token-window behavior. 'mixed' is reserved for detector-driven "
+            "mixed chunking and is not implemented yet (see P3-19)."
+        ),
+    )
     args = parser.parse_args()
+
+    if args.chunk_mode == "mixed":
+        raise SystemExit(
+            "--chunk-mode mixed is not implemented yet. "
+            "Use scripts/detect_table_pages.py + scripts/build_mixed_chunks.py directly, "
+            "or wait for P3-19."
+        )
 
     print("Step 1/3: extracting PDF pages")
     pages = extract_pages(args.pdf, page_ranges=args.page_ranges)
