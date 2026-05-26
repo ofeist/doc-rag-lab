@@ -8,34 +8,24 @@ $RootDir = Resolve-Path (Join-Path $PSScriptRoot "..")
 $VenvDir = Join-Path $RootDir ".venv"
 
 function Get-PythonCommand {
-    $pyLauncher = Get-Command "py" -ErrorAction SilentlyContinue
-    if ($pyLauncher) {
-        return @("py", "-3")
-    }
-
     $python = Get-Command "python" -ErrorAction SilentlyContinue
     if ($python) {
-        return @("python")
+        return "python"
     }
 
     $python3 = Get-Command "python3" -ErrorAction SilentlyContinue
     if ($python3) {
-        return @("python3")
+        return "python3"
     }
 
     throw "Python 3 was not found on PATH."
 }
 
-$PythonCommand = Get-PythonCommand
-$PythonExe = $PythonCommand[0]
-$PythonArgs = @()
-if ($PythonCommand.Length -gt 1) {
-    $PythonArgs = $PythonCommand[1..($PythonCommand.Length - 1)]
-}
+$PythonExe = Get-PythonCommand
 
 if (-not (Test-Path $VenvDir)) {
     Write-Host "Creating virtual environment: $VenvDir"
-    & $PythonExe @PythonArgs -m venv $VenvDir
+    & $PythonExe -m venv $VenvDir
 }
 else {
     Write-Host "Virtual environment already exists: $VenvDir"
