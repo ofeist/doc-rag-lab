@@ -2,10 +2,10 @@
 """
 Experimental table-aware row-group chunk builder (generalized interface).
 
-This generalizes the CLI of ``scripts/build_memory_map_table_chunks.py`` so the
-same table-aware chunking can be pointed at other table-heavy slices via flags
-(input, output, doc-id, source, page ranges, section title, group/residual
-sizes) instead of memory_map-hardcoded constants.
+This is the canonical CLI for experimental table-aware chunking. It can be
+pointed at table-heavy slices via flags (input, output, doc-id, source, page
+ranges, section title, group/residual sizes) instead of memory_map-hardcoded
+constants.
 
 It is still an *experiment*, not the normal ingest pipeline:
 - it does not change ``scripts/chunk_pages.py`` or ``scripts/ingest_document.py``

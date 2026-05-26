@@ -10,9 +10,9 @@ table-aware chunks:             80 / 80 / 100
 table-aware chunks + ranking:   80 / 100 / 100   (hit@1 / hit@3 / hit@5)
 ```
 
-The first builder, `scripts/build_memory_map_table_chunks.py`, hardcoded the
-`memory_map` slice (section title, source, doc-id, page range, output name). The
-chunking logic was reusable but the interface was not.
+The first builder hardcoded the `memory_map` slice (section title, source,
+doc-id, page range, output name). The chunking logic was reusable but the
+interface was not.
 
 `scripts/build_table_aware_chunks.py` keeps the exact same chunking behavior and
 exposes it through flags, so the same experiment can be pointed at other
@@ -130,8 +130,8 @@ Columns: Segment | Address Range | Size | Description | Read | Write
 
 ## memory_map validation result
 
-Output is byte-equivalent to the old `build_memory_map_table_chunks.py` output
-except for the cosmetic `chunk_id` prefix (102 chunks, 91 `table_row_group` + 11
+Output is byte-equivalent to the old memory-map-specific builder output except
+for the cosmetic `chunk_id` prefix (102 chunks, 91 `table_row_group` + 11
 `generic_residual`, 298 rows, 31/31 segment markers accepted). `chunk_id` is not
 used by `embed_chunks.py` (it derives its own id from source/page/indices), so
 retrieval is identical:
@@ -162,9 +162,9 @@ Behavior preserved.
 
 ## Status of the old script
 
-`scripts/build_memory_map_table_chunks.py` is now superseded by this generalized
-builder (verified equivalent for `memory_map`). It is left in place for now and
-can be removed in a later cleanup slice once nothing else depends on it.
+The memory-map-specific builder was superseded by this generalized builder
+(verified equivalent for `memory_map`) and removed in P3-6A. Use
+`scripts/build_table_aware_chunks.py` for table-aware chunk experiments.
 
 ## Non-goals
 
