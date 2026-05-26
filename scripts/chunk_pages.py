@@ -94,6 +94,15 @@ def build_chunks(
                     "page_chunk_index": page_chunk_index,
                     "chunk_index": global_chunk_index,
                     "token_count": len(token_chunk),
+                    # Schema-compatible with mixed chunks (P3-19). Generic chunks
+                    # carry chunk_type plus empty table fields so all ingest modes
+                    # emit one common schema. doc_id is added later by ingest.
+                    "chunk_type": "generic_page",
+                    "section_title": "",
+                    "table_title": "",
+                    "table_context": "",
+                    "column_headers": [],
+                    "row_count": 0,
                     "text": chunk_text,
                 }
             )
