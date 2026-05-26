@@ -272,8 +272,11 @@ Conservative sequence, each slice independently shippable:
   `chunk_type` to Chroma) is still open for P3-22; the experiment also noted
   hybrid hit@1/hit@3 vary by ~1 question across rebuilds due to HNSW index
   nondeterminism.
-- **P3-20** — add the ingest report summary (detector summary + chunk-type counts
-  + guardrail warnings) to `ingest_document.py` output.
+- **P3-20** (done) — mixed mode prints a final report (ingest summary + table
+  detection summary + chunk-type counts) and non-failing guardrail warnings (no
+  `table_row_group` chunks; >60% of pages routed to `table_row_group`). Generic
+  mode keeps its JSON summary. See
+  `docs/experiments/MIXED_INGEST_REPORTING_EXPERIMENT.md`.
 - **P3-21** — add `--keep-intermediate-artifacts`; default to writing the chunk
   JSONL only and cleaning raw/candidate intermediates.
 - **P3-22** — design and implement automatic retrieval-mode selection using the
